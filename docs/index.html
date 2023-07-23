@@ -4,36 +4,6 @@
 <html no_gl="false" lang="en" class="dcg-calculator-api-container">
 <head>
 
-  <script type="text/javascript">
-    // Single Page Apps for GitHub Pages
-    // https://github.com/rafrex/spa-github-pages
-    // Copyright (c) 2016 Rafael Pedicini, licensed under the MIT License
-    // ----------------------------------------------------------------------
-    // This script checks to see if a redirect is present in the query string
-    // and converts it back into the correct url and adds it to the
-    // browser's history using window.history.replaceState(...),
-    // which won't cause the browser to attempt to load the new url.
-    // When the single page app is loaded further down in this file,
-    // the correct url will be waiting in the browser's history for
-    // the single page app to route accordingly.
-    (function (l) {
-      if (l.search) {
-        var q = {};
-        l.search.slice(1).split('&').forEach(function (v) {
-          var a = v.split('=');
-          q[a[0]] = a.slice(1).join('=').replace(/~and~/g, '&');
-        });
-        if (q.p !== undefined) {
-          window.history.replaceState(null, null,
-            l.pathname.slice(0, -1) + (q.p || '') +
-            (q.q ? ('?' + q.q) : '') +
-            l.hash
-          );
-        }
-      }
-    }(window.location))
-  </script>
-
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=0" />
   <!--chrome=1 enables chrome frame; IE=edge specifies that IE should run in the highest mode available to that version of IE.-->
@@ -46,28 +16,28 @@
   <meta property="og:image" content="https://s3.amazonaws.com/desmos/img/calc_thumb.png" />
   <link rel="image_src" href="https://s3.amazonaws.com/desmos/img/calc_thumb.png" />
 
-      <link rel="canonical" href="https://www.desmos.com/calculator" />
-      <link rel="alternate" hreflang="de" href="https://www.desmos.com/calculator?lang=de" />
-      <link rel="alternate" hreflang="es" href="https://www.desmos.com/calculator?lang=es" />
-      <link rel="alternate" hreflang="et" href="https://www.desmos.com/calculator?lang=et" />
-      <link rel="alternate" hreflang="fr" href="https://www.desmos.com/calculator?lang=fr" />
-      <link rel="alternate" hreflang="id" href="https://www.desmos.com/calculator?lang=id" />
-      <link rel="alternate" hreflang="it" href="https://www.desmos.com/calculator?lang=it" />
-      <link rel="alternate" hreflang="ja" href="https://www.desmos.com/calculator?lang=ja" />
-      <link rel="alternate" hreflang="ko" href="https://www.desmos.com/calculator?lang=ko" />
-      <link rel="alternate" hreflang="nl" href="https://www.desmos.com/calculator?lang=nl" />
-      <link rel="alternate" hreflang="pl" href="https://www.desmos.com/calculator?lang=pl" />
-      <link rel="alternate" hreflang="pt-BR" href="https://www.desmos.com/calculator?lang=pt-BR" />
-      <link rel="alternate" hreflang="ru" href="https://www.desmos.com/calculator?lang=ru" />
-      <link rel="alternate" hreflang="sv-SE" href="https://www.desmos.com/calculator?lang=sv-SE" />
-      <link rel="alternate" hreflang="th" href="https://www.desmos.com/calculator?lang=th" />
-      <link rel="alternate" hreflang="tr" href="https://www.desmos.com/calculator?lang=tr" />
-      <link rel="alternate" hreflang="uk" href="https://www.desmos.com/calculator?lang=uk" />
-      <link rel="alternate" hreflang="vi" href="https://www.desmos.com/calculator?lang=vi" />
-      <link rel="alternate" hreflang="zh-CN" href="https://www.desmos.com/calculator?lang=zh-CN" />
-      <link rel="alternate" hreflang="zh-TW" href="https://www.desmos.com/calculator?lang=zh-TW" />
-      <link rel="alternate" hreflang="en" href="https://www.desmos.com/calculator" />
-      <link rel="alternate" hreflang="x-default" href="https://www.desmos.com/calculator" />
+  <link rel="canonical" href="https://www.desmos.com/calculator" />
+  <link rel="alternate" hreflang="de" href="https://www.desmos.com/calculator?lang=de" />
+  <link rel="alternate" hreflang="es" href="https://www.desmos.com/calculator?lang=es" />
+  <link rel="alternate" hreflang="et" href="https://www.desmos.com/calculator?lang=et" />
+  <link rel="alternate" hreflang="fr" href="https://www.desmos.com/calculator?lang=fr" />
+  <link rel="alternate" hreflang="id" href="https://www.desmos.com/calculator?lang=id" />
+  <link rel="alternate" hreflang="it" href="https://www.desmos.com/calculator?lang=it" />
+  <link rel="alternate" hreflang="ja" href="https://www.desmos.com/calculator?lang=ja" />
+  <link rel="alternate" hreflang="ko" href="https://www.desmos.com/calculator?lang=ko" />
+  <link rel="alternate" hreflang="nl" href="https://www.desmos.com/calculator?lang=nl" />
+  <link rel="alternate" hreflang="pl" href="https://www.desmos.com/calculator?lang=pl" />
+  <link rel="alternate" hreflang="pt-BR" href="https://www.desmos.com/calculator?lang=pt-BR" />
+  <link rel="alternate" hreflang="ru" href="https://www.desmos.com/calculator?lang=ru" />
+  <link rel="alternate" hreflang="sv-SE" href="https://www.desmos.com/calculator?lang=sv-SE" />
+  <link rel="alternate" hreflang="th" href="https://www.desmos.com/calculator?lang=th" />
+  <link rel="alternate" hreflang="tr" href="https://www.desmos.com/calculator?lang=tr" />
+  <link rel="alternate" hreflang="uk" href="https://www.desmos.com/calculator?lang=uk" />
+  <link rel="alternate" hreflang="vi" href="https://www.desmos.com/calculator?lang=vi" />
+  <link rel="alternate" hreflang="zh-CN" href="https://www.desmos.com/calculator?lang=zh-CN" />
+  <link rel="alternate" hreflang="zh-TW" href="https://www.desmos.com/calculator?lang=zh-TW" />
+  <link rel="alternate" hreflang="en" href="https://www.desmos.com/calculator" />
+  <link rel="alternate" hreflang="x-default" href="https://www.desmos.com/calculator" />
 
   <link rel="stylesheet" href="calculator-3d_desktop.css" />
 
@@ -207,28 +177,29 @@
 </style>
 
 </head>
+
 <body data-load-data="{&quot;seed&quot;:&quot;eaa06d8aff63429c93302e1307bf13eb&quot;}" data-country="US">
 
-  <div class="dcg-loading-div-container">
+<div class="dcg-loading-div-container">
   <div class="dcg-loading-background-div"></div>
   <div class="dcg-loading-div">Loading...</div>
 </div>
 
 
-  <!-- GRAPHER -->
-  <div class="dcg-sliding-interior">
-    <!-- this will contain all of the menus and the graph -->
-    <div id="dcg-header-container"></div>
-    <div id="graph-container"></div>
-  </div>
+<!-- GRAPHER -->
+<div class="dcg-sliding-interior">
+  <!-- this will contain all of the menus and the graph -->
+  <div id="dcg-header-container"></div>
+  <div id="graph-container"></div>
+</div>
 
-  <div id="mygraphs-container"></div>
-  <div id="dcg-modal-container"></div>
+<div id="mygraphs-container"></div>
+<div id="dcg-modal-container"></div>
 
-  <!-- 1pixel white image for printing in FF -->
 <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAAXNSR0IArs4c6QAAAAlwSFlzAAALEwAACxMBAJqcGAAAAAd0SU1FB9wLEhYhKmtn2wYAAAAidEVYdENvbW1lbnQAQ3JlYXRlZCB3aXRoIEdJTVAgb24gYSBNYWOHqHdDAAAADElEQVQI12P4//8/AAX+Av7czFnnAAAAAElFTkSuQmCC" id="whitebg" aria-hidden="true" alt="">
- <!-- 1 white pixel for printing in FF -->
-  <script type="text/javascript">
+<!-- 1 white pixel for printing in FF -->
+
+<script type="text/javascript">
   // catches errors within iframe and promotes them to qunit during tests
   try {
     window.onerror=window.top.onerror;
@@ -237,23 +208,24 @@
   Desmos.config = {};
   Desmos.commit = '17627194f17a35e2737070037928b21720e23c61';
 </script>
- <!-- Pull config information, and include it in Desmos.config -->
-  <!-- TODO - get console and pushstate into regular .js files -->
-  <script type="text/javascript">
+<!-- Pull config information, and include it in Desmos.config -->
+
+<!-- TODO - get console and pushstate into regular .js files -->
+<script type="text/javascript">
   if(!window.console) window.console = {};
   if(!window.console.log) window.console.log = function(){};
 </script>
- <!-- Make sure console.log is defined -->
-  <script type="text/javascript">
-  if(window.location.protocol === 'file:') {
-    window.history.pushState = function(){};
-    window.history.replaceState = function(){};
-  }
-</script>
- <!-- Make sure we don't use pushstate on file protocol -->
+<!-- Make sure console.log is defined -->
 
-  <script src="calculator-3d_desktop.js"></script>
-  <script src="grapher3d.js"></script>
+<script type="text/javascript">
+  window.history.pushState = function(){};
+  window.history.replaceState = function(){};
+</script>
+<!-- Make sure we don't use pushState or replaceState, which break things -->
+
+<script src="calculator-3d_desktop.js"></script>
+<script src="grapher3d.js"></script>
+
 </body>
 </html>
 
