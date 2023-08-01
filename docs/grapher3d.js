@@ -486,7 +486,8 @@ const DesmosCustom = {
                 if (this.preventScrollZoom) {
                     return;
                 }
-                // TODO
+                this.zoomOrientation(original.deltaX, original.deltaY);
+                this.controller.requestRedrawGraph();
             });
         }
 
@@ -555,10 +556,16 @@ const DesmosCustom = {
             // TODO
         }
 
+        zoomOrientation(deltaX, deltaY) {
+            let delta = deltaY || deltaX;
+            let zoomFactor = delta > 0 ? 1.0625 : delta < 0 ? 1 / 1.0625 : 1;
+            this.orientation.distance *= zoomFactor;
+        }
+
         rotateOrientation(delta) {
-            const ANGLE_MULTIPLIER = 0.01; // TODO: compute based on viewport size, zoom, etc.
-            this.orientation.pitch += delta.y * ANGLE_MULTIPLIER;
-            this.orientation.yaw += delta.x * ANGLE_MULTIPLIER;
+            let angleMultiplier = (this.orientation.fieldOfView / this.elt.clientHeight) * this.orientation.distance;
+            this.orientation.pitch += delta.y * angleMultiplier;
+            this.orientation.yaw += delta.x * angleMultiplier;
         }
 
         isDefaultOrientation() {
