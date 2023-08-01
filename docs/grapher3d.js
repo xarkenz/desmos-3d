@@ -370,7 +370,7 @@ const DesmosCustom = {
 
                 this.gl.viewport(0, 0, width * pixelRatio, height * pixelRatio);
 
-                this.grapher.controls.orientation.updateProjection(width, height);
+                this.grapher.controls.orientation.updateProjection(width * pixelRatio, height * pixelRatio);
                 this.grapher.controller.requestRedrawGraph();
             }
         }
