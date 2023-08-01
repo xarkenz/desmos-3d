@@ -368,7 +368,7 @@ const DesmosCustom = {
                 this.canvasNode.setAttribute("width", width * pixelRatio);
                 this.canvasNode.setAttribute("height", height * pixelRatio);
 
-                this.gl.viewport(0, 0, width, height);
+                this.gl.viewport(0, 0, width * pixelRatio, height * pixelRatio);
 
                 this.grapher.controls.orientation.updateProjection(width, height);
                 this.grapher.controller.requestRedrawGraph();
@@ -416,6 +416,10 @@ const DesmosCustom = {
 
         updatePlaneMap() {
         }
+    },
+
+    Grapher3DGridLayer: class {
+        //
     },
 
     Grapher3DControls: class {
