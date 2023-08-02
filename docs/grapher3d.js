@@ -150,6 +150,19 @@ const DesmosCustom = {
             )
         }
 
+        colorFromHex(hex) {
+            let match = hex.match(/^#([0-9A-Fa-f]{2})([0-9A-Fa-f]{2})([0-9A-Fa-f]{2})$/);
+            if (match) {
+                return [
+                    parseInt(match[1], 16) / 255,
+                    parseInt(match[2], 16) / 255,
+                    parseInt(match[3], 16) / 255,
+                ];
+            } else {
+                return [0, 0, 0];
+            }
+        }
+
         _loadContext() {
             this.legacy = false;
             this.gl = this.canvasNode.getContext("webgl2");
@@ -176,13 +189,15 @@ const DesmosCustom = {
                     uniform mat4 projection;
 
                     in vec3 vertexPosition;
-                    in vec4 vertexColor;
+                    in vec3 vertexColor;
+                    in vec3 vertexNormal;
             
                     out vec4 fragmentColor;
             
                     void main() {
-                        gl_Position = projection * modelView * vec4(vertexPosition, 1);
-                        fragmentColor = vertexColor;
+                        gl_Position = projection * modelView * vec4(vertexPosition.x, vertexPosition.z, vertexPosition.y, 1);
+                        float lightingMultiplier = max(0.0, 0.7 * vertexNormal.z + 0.3);
+                        fragmentColor = vec4(vertexColor * lightingMultiplier, 1);
                     }
                 `],
                 [this.gl.FRAGMENT_SHADER, `
@@ -197,8 +212,9 @@ const DesmosCustom = {
             this.program.triangles = {
                 id: shaderProgram,
                 attribute: {
-                    vertexPosition: this.gl.getAttribLocation(shaderProgram, "vertexPosition"),
+                    vertexPosition: (this.gl.bindAttribLocation(shaderProgram, 0, "vertexPosition"), 0),
                     vertexColor: this.gl.getAttribLocation(shaderProgram, "vertexColor"),
+                    vertexNormal: this.gl.getAttribLocation(shaderProgram, "vertexNormal"),
                 },
                 uniform: {
                     modelView: this.gl.getUniformLocation(shaderProgram, "modelView"),
@@ -208,6 +224,7 @@ const DesmosCustom = {
                     let buffer = {
                         positions: this.gl.createBuffer(),
                         colors: this.gl.createBuffer(),
+                        normals: this.gl.createBuffer(),
                         indices: this.gl.createBuffer(),
                     };
         
@@ -216,19 +233,22 @@ const DesmosCustom = {
                     this.gl.enableVertexAttribArray(this.program.triangles.attribute.vertexPosition);
         
                     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer.colors);
-                    this.gl.vertexAttribPointer(this.program.triangles.attribute.vertexColor, 4, this.gl.FLOAT, false, 0, 0);
+                    this.gl.vertexAttribPointer(this.program.triangles.attribute.vertexColor, 3, this.gl.FLOAT, false, 0, 0);
                     this.gl.enableVertexAttribArray(this.program.triangles.attribute.vertexColor);
+
+                    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer.normals);
+                    this.gl.vertexAttribPointer(this.program.triangles.attribute.vertexNormal, 3, this.gl.FLOAT, false, 0, 0);
+                    this.gl.enableVertexAttribArray(this.program.triangles.attribute.vertexNormal);
         
                     return buffer;
                 },
             };
 
-            shaderProgram = this.createShaderProgram([ // TODO: make scaleFactor work properly
+            shaderProgram = this.createShaderProgram([
                 [this.gl.VERTEX_SHADER, `
                     uniform mat4 modelView;
                     uniform mat4 projection;
-                    uniform float width;
-                    uniform float height;
+                    uniform vec2 resolution;
 
                     in vec3 vertexPosition;
                     in vec4 vertexColor;
@@ -236,20 +256,27 @@ const DesmosCustom = {
                     in float vertexOffset;
             
                     out vec4 fragmentColor;
+
+                    vec2 getScreen(vec4 projected, float aspect) {
+                        vec2 screen = projected.xy / projected.w;
+                        screen.x *= aspect;
+                        return screen;
+                    }
             
                     void main() {
-                        float aspect = width / height;
+                        float aspect = resolution.x / resolution.y;
                         mat4 projViewModel = projection * modelView;
-                        vec4 projVertex = projViewModel * vec4(vertexPosition, 1);
-                        vec2 vertexScreen = projVertex.xy / projVertex.w;
-                        vertexScreen.x *= aspect;
-                        vec4 projTangent = projViewModel * vec4(vertexTangent, 1);
-                        vec2 tangentScreen = projTangent.xy / projTangent.w;
-                        tangentScreen.x *= aspect;
+                        vec4 projVertex = projViewModel * vec4(vertexPosition.x, vertexPosition.z, vertexPosition.y, 1);
+                        vec2 vertexScreen = getScreen(projVertex, aspect);
+                        vec4 projTangent = projViewModel * vec4(vertexTangent.x, vertexTangent.z, vertexTangent.y, 1);
+                        vec2 tangentScreen = getScreen(projTangent, aspect);
                         vec2 direction = normalize(tangentScreen - vertexScreen);
-                        vec2 normal = vec2(-direction.y / aspect, direction.x);
-                        float scaleFactor = 0.03;
-                        gl_Position = projVertex + vec4(normal * vertexOffset * scaleFactor, 0, 0);
+                        vec4 normal = vec4(-direction.y / aspect, direction.x, 0, 1);
+                        normal.xy *= vertexOffset;
+                        normal *= projection;
+                        normal.xy *= projVertex.w;
+                        normal.xy /= (vec4(resolution, 0, 1) * projection).xy;
+                        gl_Position = projVertex + vec4(normal.xy, 0, 0);
                         fragmentColor = vertexColor;
                     }
                 `],
@@ -265,7 +292,7 @@ const DesmosCustom = {
             this.program.lines = {
                 id: shaderProgram,
                 attribute: {
-                    vertexPosition: this.gl.getAttribLocation(shaderProgram, "vertexPosition"),
+                    vertexPosition: (this.gl.bindAttribLocation(shaderProgram, 0, "vertexPosition"), 0),
                     vertexColor: this.gl.getAttribLocation(shaderProgram, "vertexColor"),
                     vertexTangent: this.gl.getAttribLocation(shaderProgram, "vertexTangent"),
                     vertexOffset: this.gl.getAttribLocation(shaderProgram, "vertexOffset"),
@@ -273,8 +300,7 @@ const DesmosCustom = {
                 uniform: {
                     modelView: this.gl.getUniformLocation(shaderProgram, "modelView"),
                     projection: this.gl.getUniformLocation(shaderProgram, "projection"),
-                    width: this.gl.getUniformLocation(shaderProgram, "width"),
-                    height: this.gl.getUniformLocation(shaderProgram, "height"),
+                    resolution: this.gl.getUniformLocation(shaderProgram, "resolution"),
                 },
                 createBuffers: () => {
                     let buffer = {
@@ -356,7 +382,6 @@ const DesmosCustom = {
             const header = {};
             header[this.gl.VERTEX_SHADER] = `\
                 #version ${glslVersion} es
-                precision highp float;
                 #if __VERSION__ < 300
                     #define in attribute
                     #define out varying
@@ -364,7 +389,11 @@ const DesmosCustom = {
             `;
             header[this.gl.FRAGMENT_SHADER] = `\
                 #version ${glslVersion} es
-                precision highp float;
+                #ifdef GL_FRAGMENT_PRECISION_HIGH
+                    precision highp float;
+                #else
+                    precision mediump float;
+                #endif
                 #if __VERSION__ < 300
                     #define color gl_FragColor
                     #define in varying
@@ -374,10 +403,10 @@ const DesmosCustom = {
             `;
         
             const shaderProgram = this.gl.createProgram();
-            if (!shaders.every((shaderInfo) => {
-                let [type, source] = shaderInfo;
+            if (!shaders.every(([type, source]) => {
                 let shader = this.createShader(type, (header[type] || "") + source);
                 this.gl.attachShader(shaderProgram, shader);
+                this.gl.deleteShader(shader);
                 return shader;
             })) {
                 return null;
@@ -439,11 +468,8 @@ const DesmosCustom = {
 
             this.gl.uniformMatrix4fv(program.uniform.modelView, false, this.grapher.controls.orientation.getModelView());
             this.gl.uniformMatrix4fv(program.uniform.projection, false, this.grapher.controls.orientation.getProjection());
-            if (program.uniform.width) {
-                this.gl.uniform1f(program.uniform.width, this.width);
-            }
-            if (program.uniform.height) {
-                this.gl.uniform1f(program.uniform.height, this.height);
+            if (program.uniform.resolution) {
+                this.gl.uniform2f(program.uniform.resolution, this.width, this.height);
             }
         }
 
@@ -479,7 +505,7 @@ const DesmosCustom = {
             this.buffer ||= layer.program.lines.createBuffers();
 
             let {positions, colors, tangents, offsets, indices} = layer.program.lines.generateLineGeometry([
-                -2,0,0, 2,0,0, 0,0,-2, 0,0,2, 0,projection.viewport.zmin,0, 0,projection.viewport.zmax,0,
+                projection.viewport.xmin,0,0, projection.viewport.xmax,0,0, 0,projection.viewport.ymin,0, 0,projection.viewport.ymax,0, 0,0,projection.viewport.zmin, 0,0,projection.viewport.zmax,
             ], [
                 0,0,0,this.grapher.settings.axisOpacity, 0,0,0,this.grapher.settings.axisOpacity, 0,0,0,this.grapher.settings.axisOpacity, 0,0,0,this.grapher.settings.axisOpacity, 0,0,0,this.grapher.settings.axisOpacity, 0,0,0,this.grapher.settings.axisOpacity,
             ], [
@@ -500,6 +526,60 @@ const DesmosCustom = {
             layer.gl.bufferData(layer.gl.ELEMENT_ARRAY_BUFFER, indices, layer.gl.DYNAMIC_DRAW);
 
             layer.setProgram(layer.program.lines);
+
+            layer.gl.drawElements(layer.gl.TRIANGLES, indices.length, layer.gl.UNSIGNED_INT, 0);
+        }
+    },
+
+    Grapher3DGraphsLayer: class { // TODO: this is pretty nasty in terms of webgl
+        constructor(controller, settings) {
+            this.controller = controller;
+            this.settings = settings;
+            this.buffer = {};
+        }
+
+        redrawToGL(layer, projection, sketches, sketchOrder) {
+            sketchOrder.forEach((sketchID) => {
+                let sketch = sketches[sketchID];
+                if (sketch) {
+                    this.drawSketchToGL(sketch, layer, projection);
+                }
+            })
+        }
+
+        drawSketchToGL(sketch, layer, projection) {
+            if (!sketch.branches || !sketch.branches.length) {
+                return;
+            }
+            this.buffer.triangles ||= layer.program.triangles.createBuffers();
+            //this.buffer.lines ||= layer.program.lines.createBuffers();
+            sketch.branches.forEach((branch) => {
+                switch (branch.graphMode) {
+                    case dcg.GraphMode.SURFACE_Z_BASED:
+                        this.drawMeshToGL(layer, layer.colorFromHex(branch.color), branch.meshData);
+                        break;
+                    default:
+                        break;
+                }
+            });
+        }
+
+        drawMeshToGL(layer, color, {positions, normals, uvs, faces: indices}) {
+            let colors = new Float32Array(positions.length);
+            for (let colorIndex = 0; colorIndex < colors.length; colorIndex += 3) {
+                colors.set(color, colorIndex);
+            }
+
+            layer.gl.bindBuffer(layer.gl.ARRAY_BUFFER, this.buffer.triangles.positions);
+            layer.gl.bufferData(layer.gl.ARRAY_BUFFER, positions, layer.gl.DYNAMIC_DRAW);
+            layer.gl.bindBuffer(layer.gl.ARRAY_BUFFER, this.buffer.triangles.colors);
+            layer.gl.bufferData(layer.gl.ARRAY_BUFFER, colors, layer.gl.DYNAMIC_DRAW);
+            layer.gl.bindBuffer(layer.gl.ARRAY_BUFFER, this.buffer.triangles.normals);
+            layer.gl.bufferData(layer.gl.ARRAY_BUFFER, normals, layer.gl.DYNAMIC_DRAW);
+            layer.gl.bindBuffer(layer.gl.ELEMENT_ARRAY_BUFFER, this.buffer.triangles.indices);
+            layer.gl.bufferData(layer.gl.ELEMENT_ARRAY_BUFFER, indices, layer.gl.DYNAMIC_DRAW);
+
+            layer.setProgram(layer.program.triangles);
 
             layer.gl.drawElements(layer.gl.TRIANGLES, indices.length, layer.gl.UNSIGNED_INT, 0);
         }
@@ -693,6 +773,7 @@ const DesmosCustom = {
             this.webglLayer = dcg.View.mountToNode(DesmosCustom.WebGLLayer, this.elt, { grapher: () => this });
             this.elt.appendChild(this.webglLayer.rootNode);
             this.gridLayer = new DesmosCustom.Grapher3DGridLayer(this);
+            this.graphsLayer = new DesmosCustom.Grapher3DGraphsLayer(controller, settings);
             this.__sketchOrder = [];
             this.__redrawRequested = false;
             this.__isRedrawingSlowly = false;
@@ -775,11 +856,16 @@ const DesmosCustom = {
             }
             this.__redrawRequested = false;
             this.webglLayer.beginRedraw();
+            this._redrawGraphsLayer();
             this._redrawGridLayer();
         }
 
         _redrawGridLayer() {
             this.gridLayer.redrawToGL(this.webglLayer, this.getProjection());
+        }
+
+        _redrawGraphsLayer() {
+            this.graphsLayer.redrawToGL(this.webglLayer, this.getProjection(), this.graphSketches, this.__sketchOrder);
         }
 
         getGraphSketch(sketchID) {
@@ -801,7 +887,7 @@ const DesmosCustom = {
                 return;
             }
             let sketch = new DesmosCustom.GraphSketch3D(sketchID, branches);
-            if (branches[0].graphMode !== dcg.GraphMode.UNKNOWN_15) {
+            if (branches[0].graphMode !== dcg.GraphMode.ERROR) {
                 sketch.color = branches[0].color;
                 if (branches[0].style) {
                     sketch.style = branches[0].style;
