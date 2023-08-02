@@ -196,7 +196,7 @@ const DesmosCustom = {
             
                     void main() {
                         gl_Position = projection * modelView * vec4(vertexPosition.x, vertexPosition.z, vertexPosition.y, 1);
-                        float lightingMultiplier = max(0.0, 0.7 * abs(vertexNormal.z) + 0.3);
+                        float lightingMultiplier = 0.7 * abs(vertexNormal.z) + 0.3;
                         fragmentColor = vec4(vertexColor * lightingMultiplier, 1);
                     }
                 `],
@@ -550,7 +550,11 @@ const DesmosCustom = {
             this.buffer.lines ||= layer.program.lines.createBuffers();
             sketch.branches.forEach((branch) => {
                 switch (branch.graphMode) {
+                    case dcg.GraphMode.SURFACE_PARAMETRIC:
                     case dcg.GraphMode.SURFACE_Z_BASED:
+                    case dcg.GraphMode.SURFACE_X_BASED:
+                    case dcg.GraphMode.SURFACE_Y_BASED:
+                    case dcg.GraphMode.SURFACE_IMPLICIT:
                         this.drawMeshToGL(layer, layer.colorFromHex(branch.color), branch.meshData);
                         break;
                     default:
