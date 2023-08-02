@@ -196,7 +196,7 @@ const DesmosCustom = {
             
                     void main() {
                         gl_Position = projection * modelView * vec4(vertexPosition.x, vertexPosition.z, vertexPosition.y, 1);
-                        float lightingMultiplier = max(0.0, 0.7 * vertexNormal.z + 0.3);
+                        float lightingMultiplier = max(0.0, 0.7 * abs(vertexNormal.z) + 0.3);
                         fragmentColor = vec4(vertexColor * lightingMultiplier, 1);
                     }
                 `],
@@ -220,28 +220,25 @@ const DesmosCustom = {
                     modelView: this.gl.getUniformLocation(shaderProgram, "modelView"),
                     projection: this.gl.getUniformLocation(shaderProgram, "projection"),
                 },
-                createBuffers: () => {
-                    let buffer = {
-                        positions: this.gl.createBuffer(),
-                        colors: this.gl.createBuffer(),
-                        normals: this.gl.createBuffer(),
-                        indices: this.gl.createBuffer(),
-                    };
-        
-                    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer.positions);
+                createBuffers: () => ({
+                    positions: this.gl.createBuffer(),
+                    colors: this.gl.createBuffer(),
+                    normals: this.gl.createBuffer(),
+                    indices: this.gl.createBuffer(),
+                }),
+                attachBuffers: ({positions, colors, normals, indices}) => {
+                    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, positions);
                     this.gl.vertexAttribPointer(this.program.triangles.attribute.vertexPosition, 3, this.gl.FLOAT, false, 0, 0);
                     this.gl.enableVertexAttribArray(this.program.triangles.attribute.vertexPosition);
         
-                    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer.colors);
+                    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, colors);
                     this.gl.vertexAttribPointer(this.program.triangles.attribute.vertexColor, 3, this.gl.FLOAT, false, 0, 0);
                     this.gl.enableVertexAttribArray(this.program.triangles.attribute.vertexColor);
 
-                    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer.normals);
+                    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, normals);
                     this.gl.vertexAttribPointer(this.program.triangles.attribute.vertexNormal, 3, this.gl.FLOAT, false, 0, 0);
                     this.gl.enableVertexAttribArray(this.program.triangles.attribute.vertexNormal);
-        
-                    return buffer;
-                },
+                }
             };
 
             shaderProgram = this.createShaderProgram([
@@ -302,32 +299,29 @@ const DesmosCustom = {
                     projection: this.gl.getUniformLocation(shaderProgram, "projection"),
                     resolution: this.gl.getUniformLocation(shaderProgram, "resolution"),
                 },
-                createBuffers: () => {
-                    let buffer = {
-                        positions: this.gl.createBuffer(),
-                        colors: this.gl.createBuffer(),
-                        tangents: this.gl.createBuffer(),
-                        offsets: this.gl.createBuffer(),
-                        indices: this.gl.createBuffer(),
-                    };
-        
-                    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer.positions);
+                createBuffers: () => ({
+                    positions: this.gl.createBuffer(),
+                    colors: this.gl.createBuffer(),
+                    tangents: this.gl.createBuffer(),
+                    offsets: this.gl.createBuffer(),
+                    indices: this.gl.createBuffer(),
+                }),
+                attachBuffers: ({positions, colors, tangents, offsets, indices}) => {
+                    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, positions);
                     this.gl.vertexAttribPointer(this.program.lines.attribute.vertexPosition, 3, this.gl.FLOAT, false, 0, 0);
                     this.gl.enableVertexAttribArray(this.program.lines.attribute.vertexPosition);
         
-                    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer.colors);
+                    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, colors);
                     this.gl.vertexAttribPointer(this.program.lines.attribute.vertexColor, 4, this.gl.FLOAT, false, 0, 0);
                     this.gl.enableVertexAttribArray(this.program.lines.attribute.vertexColor);
 
-                    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer.tangents);
+                    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, tangents);
                     this.gl.vertexAttribPointer(this.program.lines.attribute.vertexTangent, 3, this.gl.FLOAT, false, 0, 0);
                     this.gl.enableVertexAttribArray(this.program.lines.attribute.vertexTangent);
 
-                    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer.offsets);
+                    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, offsets);
                     this.gl.vertexAttribPointer(this.program.lines.attribute.vertexOffset, 1, this.gl.FLOAT, false, 0, 0);
                     this.gl.enableVertexAttribArray(this.program.lines.attribute.vertexOffset);
-        
-                    return buffer;
                 },
                 generateLineGeometry: (positions, colors, widths, indices) => {
                     let output = {
@@ -463,7 +457,7 @@ const DesmosCustom = {
             this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
         }
 
-        setProgram(program) {
+        setProgram(program, buffers) {
             this.gl.useProgram(program.id);
 
             this.gl.uniformMatrix4fv(program.uniform.modelView, false, this.grapher.controls.orientation.getModelView());
@@ -471,11 +465,12 @@ const DesmosCustom = {
             if (program.uniform.resolution) {
                 this.gl.uniform2f(program.uniform.resolution, this.width, this.height);
             }
+
+            program.attachBuffers(buffers);
         }
 
         setBackgroundColor(color = "#ffffff") {
-            console.log("setBackgroundColor");
-            this.gl.clearColor(1, 1, 1, 1);
+            this.gl.clearColor(...this.colorFromHex(color), 1);
             this.grapher.controller.requestRedrawGraph();
         }
 
@@ -525,7 +520,7 @@ const DesmosCustom = {
             layer.gl.bindBuffer(layer.gl.ELEMENT_ARRAY_BUFFER, this.buffer.indices);
             layer.gl.bufferData(layer.gl.ELEMENT_ARRAY_BUFFER, indices, layer.gl.DYNAMIC_DRAW);
 
-            layer.setProgram(layer.program.lines);
+            layer.setProgram(layer.program.lines, this.buffer);
 
             layer.gl.drawElements(layer.gl.TRIANGLES, indices.length, layer.gl.UNSIGNED_INT, 0);
         }
@@ -552,7 +547,7 @@ const DesmosCustom = {
                 return;
             }
             this.buffer.triangles ||= layer.program.triangles.createBuffers();
-            //this.buffer.lines ||= layer.program.lines.createBuffers();
+            this.buffer.lines ||= layer.program.lines.createBuffers();
             sketch.branches.forEach((branch) => {
                 switch (branch.graphMode) {
                     case dcg.GraphMode.SURFACE_Z_BASED:
@@ -579,7 +574,7 @@ const DesmosCustom = {
             layer.gl.bindBuffer(layer.gl.ELEMENT_ARRAY_BUFFER, this.buffer.triangles.indices);
             layer.gl.bufferData(layer.gl.ELEMENT_ARRAY_BUFFER, indices, layer.gl.DYNAMIC_DRAW);
 
-            layer.setProgram(layer.program.triangles);
+            layer.setProgram(layer.program.triangles, this.buffer.triangles);
 
             layer.gl.drawElements(layer.gl.TRIANGLES, indices.length, layer.gl.UNSIGNED_INT, 0);
         }
