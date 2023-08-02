@@ -196,7 +196,7 @@ const DesmosCustom = {
             
                     void main() {
                         gl_Position = projection * modelView * vec4(vertexPosition.x, vertexPosition.z, vertexPosition.y, 1);
-                        float lightingMultiplier = 0.7 * abs(vertexNormal.z) + 0.3;
+                        float lightingMultiplier = 0.7 * abs(normalize(vertexNormal).z) + 0.3;
                         fragmentColor = vec4(vertexColor * lightingMultiplier, 1);
                     }
                 `],
