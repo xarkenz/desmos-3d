@@ -501,12 +501,20 @@ const DesmosCustom = {
 
             let {positions, colors, tangents, offsets, indices} = layer.program.lines.generateLineGeometry([
                 projection.viewport.xmin,0,0, projection.viewport.xmax,0,0, 0,projection.viewport.ymin,0, 0,projection.viewport.ymax,0, 0,0,projection.viewport.zmin, 0,0,projection.viewport.zmax,
+                projection.viewport.xmin,projection.viewport.ymin,0, projection.viewport.xmax,projection.viewport.ymin,0, projection.viewport.xmax,projection.viewport.ymax,0, projection.viewport.xmin,projection.viewport.ymax,0,
+                projection.viewport.xmax,0,0, projection.viewport.xmax+0.25,0,0, 0,projection.viewport.ymax,0, 0,projection.viewport.ymax+0.25,0, 0,0,projection.viewport.zmax, 0,0,projection.viewport.zmax+0.25,
             ], [
                 0,0,0,this.grapher.settings.axisOpacity, 0,0,0,this.grapher.settings.axisOpacity, 0,0,0,this.grapher.settings.axisOpacity, 0,0,0,this.grapher.settings.axisOpacity, 0,0,0,this.grapher.settings.axisOpacity, 0,0,0,this.grapher.settings.axisOpacity,
+                0,0,0,this.grapher.settings.majorAxisOpacity, 0,0,0,this.grapher.settings.majorAxisOpacity, 0,0,0,this.grapher.settings.majorAxisOpacity, 0,0,0,this.grapher.settings.majorAxisOpacity,
+                0,0,0,this.grapher.settings.axisOpacity, 0,0,0,this.grapher.settings.axisOpacity, 0,0,0,this.grapher.settings.axisOpacity, 0,0,0,this.grapher.settings.axisOpacity, 0,0,0,this.grapher.settings.axisOpacity, 0,0,0,this.grapher.settings.axisOpacity,
             ], [
-                this.grapher.settings.axisLineWidth, this.grapher.settings.axisLineWidth, this.grapher.settings.axisLineWidth, this.grapher.settings.axisLineWidth, this.grapher.settings.axisLineWidth, this.grapher.settings.axisLineWidth,
+                2, 2, 2, 2, 2, 2,
+                2, 2, 2, 2,
+                20, 0, 20, 0, 20, 0,
             ], [
                 0,1, 2,3, 4,5,
+                6,7, 7,8, 8,9, 9,6,
+                10,11, 12,13, 14,15,
             ]);
 
             layer.gl.bindBuffer(layer.gl.ARRAY_BUFFER, this.buffer.positions);
@@ -550,6 +558,10 @@ const DesmosCustom = {
             this.buffer.lines ||= layer.program.lines.createBuffers();
             sketch.branches.forEach((branch) => {
                 switch (branch.graphMode) {
+                    case dcg.GraphMode.CURVE_3D_PARAMETRIC:
+                    case dcg.GraphMode.CURVE_3D_XY_GRAPH:
+                        this.drawCurveToGL(layer, layer.colorFromHex(branch.color), 1, branch.thickness, branch.points);
+                        break;
                     case dcg.GraphMode.SURFACE_PARAMETRIC:
                     case dcg.GraphMode.SURFACE_Z_BASED:
                     case dcg.GraphMode.SURFACE_X_BASED:
@@ -582,6 +594,42 @@ const DesmosCustom = {
 
             layer.gl.drawElements(layer.gl.TRIANGLES, indices.length, layer.gl.UNSIGNED_INT, 0);
         }
+
+        drawCurveToGL(layer, color, opacity, thickness, points) {
+            if (!points) {
+                return;
+            }
+            let count = points.length / 3;
+            let origColors = new Float32Array(count * 4);
+            for (let colorIndex = 0; colorIndex < origColors.length; colorIndex += 4) {
+                origColors.set(color, colorIndex);
+                origColors[colorIndex + 3] = opacity;
+            }
+            let origWidths = new Float32Array(count / 3);
+            origWidths.fill(thickness * 4);
+            let origIndices = new Uint32Array((count - 1) * 2);
+            for (let index = 0; index + 1 < count; index++) {
+                origIndices[index * 2 + 0] = index + 0;
+                origIndices[index * 2 + 1] = index + 1;
+            }
+
+            let {positions, colors, tangents, offsets, indices} = layer.program.lines.generateLineGeometry(points, origColors, origWidths, origIndices);
+
+            layer.gl.bindBuffer(layer.gl.ARRAY_BUFFER, this.buffer.lines.positions);
+            layer.gl.bufferData(layer.gl.ARRAY_BUFFER, positions, layer.gl.DYNAMIC_DRAW);
+            layer.gl.bindBuffer(layer.gl.ARRAY_BUFFER, this.buffer.lines.colors);
+            layer.gl.bufferData(layer.gl.ARRAY_BUFFER, colors, layer.gl.DYNAMIC_DRAW);
+            layer.gl.bindBuffer(layer.gl.ARRAY_BUFFER, this.buffer.lines.tangents);
+            layer.gl.bufferData(layer.gl.ARRAY_BUFFER, tangents, layer.gl.DYNAMIC_DRAW);
+            layer.gl.bindBuffer(layer.gl.ARRAY_BUFFER, this.buffer.lines.offsets);
+            layer.gl.bufferData(layer.gl.ARRAY_BUFFER, offsets, layer.gl.DYNAMIC_DRAW);
+            layer.gl.bindBuffer(layer.gl.ELEMENT_ARRAY_BUFFER, this.buffer.lines.indices);
+            layer.gl.bufferData(layer.gl.ELEMENT_ARRAY_BUFFER, indices, layer.gl.DYNAMIC_DRAW);
+
+            layer.setProgram(layer.program.lines, this.buffer.lines);
+
+            layer.gl.drawElements(layer.gl.TRIANGLES, indices.length, layer.gl.UNSIGNED_INT, 0);
+        }
     },
 
     Grapher3DControls: class {
@@ -595,7 +643,7 @@ const DesmosCustom = {
             this.lastScrollZoom = Date.now();
             this.preventScrollZoom = false;
 
-            this.orientation = new DesmosCustom.Orientation3D(6.0, 0.25 * Math.PI, 0.1 * Math.PI);
+            this.orientation = new DesmosCustom.Orientation3D(20.0, 0.1 * Math.PI, 0.25 * Math.PI);
 
             this.addMouseWheelEventHandler();
             this.addTouchEventHandler();
