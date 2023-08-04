@@ -684,7 +684,7 @@ const DesmosCustom = {
             this.lastScrollZoom = Date.now();
             this.preventScrollZoom = false;
 
-            this.orientation = new DesmosCustom.Orientation3D(20.0, 0.1 * Math.PI, 0.25 * Math.PI);
+            this.orientation = new DesmosCustom.Orientation3D(40.0, 0.1 * Math.PI, 0.3 * Math.PI);
 
             this.addMouseWheelEventHandler();
             this.addTouchEventHandler();
