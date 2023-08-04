@@ -23,92 +23,12 @@ grapher3d references:
 */
 
 const DesmosCustom = {
-    Orientation3D: class {
-        constructor(distance, pitch, yaw) {
-            this.__distance = distance;
-            this.__pitch = pitch;
-            this.__yaw = yaw;
-            this.__fieldOfView = 45 * Math.PI / 180;
-            this.__projection = mat4.create();
+    GeometryBuffer: class {
+        constructor() {
+            this.channels = {};
         }
 
-        get distance() {
-            return this.__distance;
-        }
-
-        set distance(distance) {
-            return this.__distance = distance;
-        }
-
-        get pitch() {
-            return this.__pitch;
-        }
-
-        set pitch(radians) {
-            return this.__pitch = dcg.clamp(radians, -0.5 * Math.PI, 0.5 * Math.PI);
-        }
-
-        get yaw() {
-            return this.__yaw;
-        }
-
-        set yaw(radians) {
-            return this.__yaw = radians;
-        }
-
-        get fieldOfView() {
-            return this.__fieldOfView;
-        }
-        
-        set fieldOfView(radians) {
-            return this.__fieldOfView = radians;
-        }
-
-        updateProjection(width, height) {
-            if (width > 0 && height > 0) {
-                const aspectRatio = width / height;
-                const zNear = 0.1;
-                const zFar = Infinity;
-                mat4.perspective(this.__projection, this.__fieldOfView, aspectRatio, zNear, zFar);
-            }
-        }
-
-        getModelView() {
-            let matrix = mat4.create();
-            mat4.translate(matrix, matrix, [0.0, 0.0, -this.distance]);
-            mat4.rotate(matrix, matrix, this.pitch, [1, 0, 0]);
-            mat4.rotate(matrix, matrix, this.yaw, [0, 1, 0]);
-            return matrix;
-        }
-
-        getProjection() {
-            return this.__projection;
-        }
-
-        equals(other) {
-            return other instanceof DesmosCustom.Orientation3D
-                && mat4.equals(this.getProjection(), other.getProjection())
-                && mat4.equals(this.getModelView(), other.getModelView());
-        }
-    },
-
-    GraphSketch3D: class {
-        constructor(id, branches) {
-            this.id = id;
-            this.branches = branches || [];
-            this.color = "#000000";
-            this.style = "normal";
-            this.showPOI = false;
-            this.showHighlight = false;
-            this.selected = false;
-            this.tokenHovered = false;
-            this.tokenSelected = false;
-            this.labels = [];
-        }
-
-        updateFrom(originalSketch) {
-            // TODO
-        }
+        //addChannel
     },
 
     WebGLLayer: class extends dcg.View.Class {
@@ -118,6 +38,7 @@ const DesmosCustom = {
             this.width = 0;
             this.height = 0;
             this.pixelRatio = 0;
+            this.lightDirection = [1, 5, 1];
         }
 
         template() {
@@ -185,26 +106,28 @@ const DesmosCustom = {
 
             let shaderProgram = this.createShaderProgram([
                 [this.gl.VERTEX_SHADER, `
-                    uniform mat4 modelView;
-                    uniform mat4 projection;
+                    uniform mat4 uModelViewMatrix;
+                    uniform mat4 uProjectionMatrix;
+                    uniform vec3 uLightDirection;
 
-                    in vec3 vertexPosition;
-                    in vec3 vertexColor;
-                    in vec3 vertexNormal;
-            
-                    out vec4 fragmentColor;
+                    in vec3 aPosition;
+                    in vec3 aColor;
+                    in vec3 aNormal;
+
+                    out vec4 vColor;
             
                     void main() {
-                        gl_Position = projection * modelView * vec4(vertexPosition.x, vertexPosition.z, vertexPosition.y, 1);
-                        float lightingMultiplier = 0.7 * abs(normalize(vertexNormal).z) + 0.3;
-                        fragmentColor = vec4(vertexColor * lightingMultiplier, 1);
+                        gl_Position = uProjectionMatrix * uModelViewMatrix * vec4(aPosition, 1.0);
+
+                        float lightingMultiplier = 0.7 * abs(dot(normalize(aNormal), normalize(uLightDirection))) + 0.3;
+                        vColor = vec4(aColor * lightingMultiplier, 1.0);
                     }
                 `],
                 [this.gl.FRAGMENT_SHADER, `
-                    in vec4 fragmentColor;
-            
+                    in vec4 vColor;
+
                     void main() {
-                        color = fragmentColor;
+                        color = vColor;
                     }
                 `],
             ]);
@@ -212,13 +135,16 @@ const DesmosCustom = {
             this.program.triangles = {
                 id: shaderProgram,
                 attribute: {
-                    vertexPosition: (this.gl.bindAttribLocation(shaderProgram, 0, "vertexPosition"), 0),
-                    vertexColor: this.gl.getAttribLocation(shaderProgram, "vertexColor"),
-                    vertexNormal: this.gl.getAttribLocation(shaderProgram, "vertexNormal"),
+                    // guarantee that there is an attribute bound at location 0 so the browser doesn't have to do expensive emulation; see
+                    // https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/WebGL_best_practices#always_enable_vertex_attrib_0_as_an_array
+                    position: (this.gl.bindAttribLocation(shaderProgram, 0, "aPosition"), 0),
+                    color: this.gl.getAttribLocation(shaderProgram, "aColor"),
+                    normal: this.gl.getAttribLocation(shaderProgram, "aNormal"),
                 },
                 uniform: {
-                    modelView: this.gl.getUniformLocation(shaderProgram, "modelView"),
-                    projection: this.gl.getUniformLocation(shaderProgram, "projection"),
+                    modelViewMatrix: this.gl.getUniformLocation(shaderProgram, "uModelViewMatrix"),
+                    projectionMatrix: this.gl.getUniformLocation(shaderProgram, "uProjectionMatrix"),
+                    lightDirection: this.gl.getUniformLocation(shaderProgram, "uLightDirection"),
                 },
                 createBuffers: () => ({
                     positions: this.gl.createBuffer(),
@@ -228,31 +154,31 @@ const DesmosCustom = {
                 }),
                 attachBuffers: ({positions, colors, normals, indices}) => {
                     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, positions);
-                    this.gl.vertexAttribPointer(this.program.triangles.attribute.vertexPosition, 3, this.gl.FLOAT, false, 0, 0);
-                    this.gl.enableVertexAttribArray(this.program.triangles.attribute.vertexPosition);
+                    this.gl.vertexAttribPointer(this.program.triangles.attribute.position, 3, this.gl.FLOAT, false, 0, 0);
+                    this.gl.enableVertexAttribArray(this.program.triangles.attribute.position);
         
                     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, colors);
-                    this.gl.vertexAttribPointer(this.program.triangles.attribute.vertexColor, 3, this.gl.FLOAT, false, 0, 0);
-                    this.gl.enableVertexAttribArray(this.program.triangles.attribute.vertexColor);
+                    this.gl.vertexAttribPointer(this.program.triangles.attribute.color, 3, this.gl.FLOAT, false, 0, 0);
+                    this.gl.enableVertexAttribArray(this.program.triangles.attribute.color);
 
                     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, normals);
-                    this.gl.vertexAttribPointer(this.program.triangles.attribute.vertexNormal, 3, this.gl.FLOAT, false, 0, 0);
-                    this.gl.enableVertexAttribArray(this.program.triangles.attribute.vertexNormal);
+                    this.gl.vertexAttribPointer(this.program.triangles.attribute.normal, 3, this.gl.FLOAT, false, 0, 0);
+                    this.gl.enableVertexAttribArray(this.program.triangles.attribute.normal);
                 }
             };
 
             shaderProgram = this.createShaderProgram([
                 [this.gl.VERTEX_SHADER, `
-                    uniform mat4 modelView;
-                    uniform mat4 projection;
-                    uniform vec2 resolution;
+                    uniform mat4 uModelViewMatrix;
+                    uniform mat4 uProjectionMatrix;
+                    uniform vec2 uResolution;
 
-                    in vec3 vertexPosition;
-                    in vec4 vertexColor;
-                    in vec3 vertexTangent;
-                    in float vertexOffset;
+                    in vec3 aPosition;
+                    in vec4 aColor;
+                    in vec3 aTangent;
+                    in float aOffset;
             
-                    out vec4 fragmentColor;
+                    out vec4 vColor;
 
                     vec2 getScreen(vec4 projected, float aspect) {
                         vec2 screen = projected.xy / projected.w;
@@ -261,27 +187,31 @@ const DesmosCustom = {
                     }
             
                     void main() {
-                        float aspect = resolution.x / resolution.y;
-                        mat4 projViewModel = projection * modelView;
-                        vec4 projVertex = projViewModel * vec4(vertexPosition.x, vertexPosition.z, vertexPosition.y, 1);
-                        vec2 vertexScreen = getScreen(projVertex, aspect);
-                        vec4 projTangent = projViewModel * vec4(vertexTangent.x, vertexTangent.z, vertexTangent.y, 1);
-                        vec2 tangentScreen = getScreen(projTangent, aspect);
-                        vec2 direction = normalize(tangentScreen - vertexScreen);
-                        vec4 normal = vec4(-direction.y / aspect, direction.x, 0, 1);
-                        normal.xy *= vertexOffset;
-                        normal *= projection;
-                        normal.xy *= projVertex.w;
-                        normal.xy /= (vec4(resolution, 0, 1) * projection).xy;
-                        gl_Position = projVertex + vec4(normal.xy, 0, 0);
-                        fragmentColor = vertexColor;
+                        float aspect = uResolution.x / uResolution.y;
+                        mat4 projectionViewModelMatrix = uProjectionMatrix * uModelViewMatrix;
+
+                        vec4 projPosition = projectionViewModelMatrix * vec4(aPosition, 1.0);
+                        vec2 screenPosition = getScreen(projPosition, aspect);
+                        vec4 projTangent = projectionViewModelMatrix * vec4(aTangent, 1.0);
+                        vec2 screenTangent = getScreen(projTangent, aspect);
+
+                        vec2 direction = normalize(screenTangent - screenPosition);
+                        vec4 normal = vec4(-direction.y / aspect, direction.x, 0.0, 1.0);
+                        normal.xy *= aOffset;
+                        normal *= uProjectionMatrix;
+                        normal.xy *= projPosition.w;
+                        normal.xy /= (vec4(uResolution, 0.0, 1.0) * uProjectionMatrix).xy;
+
+                        gl_Position = projPosition + vec4(normal.xy, 0.0, 0.0);
+
+                        vColor = aColor;
                     }
                 `],
                 [this.gl.FRAGMENT_SHADER, `
-                    in vec4 fragmentColor;
+                    in vec4 vColor;
             
                     void main() {
-                        color = fragmentColor;
+                        color = vColor;
                     }
                 `],
             ]);
@@ -289,15 +219,17 @@ const DesmosCustom = {
             this.program.lines = {
                 id: shaderProgram,
                 attribute: {
-                    vertexPosition: (this.gl.bindAttribLocation(shaderProgram, 0, "vertexPosition"), 0),
-                    vertexColor: this.gl.getAttribLocation(shaderProgram, "vertexColor"),
-                    vertexTangent: this.gl.getAttribLocation(shaderProgram, "vertexTangent"),
-                    vertexOffset: this.gl.getAttribLocation(shaderProgram, "vertexOffset"),
+                    // guarantee that there is an attribute bound at location 0 so the browser doesn't have to do expensive emulation; see
+                    // https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/WebGL_best_practices#always_enable_vertex_attrib_0_as_an_array
+                    position: (this.gl.bindAttribLocation(shaderProgram, 0, "aPosition"), 0),
+                    color: this.gl.getAttribLocation(shaderProgram, "aColor"),
+                    tangent: this.gl.getAttribLocation(shaderProgram, "aTangent"),
+                    offset: this.gl.getAttribLocation(shaderProgram, "aOffset"),
                 },
                 uniform: {
-                    modelView: this.gl.getUniformLocation(shaderProgram, "modelView"),
-                    projection: this.gl.getUniformLocation(shaderProgram, "projection"),
-                    resolution: this.gl.getUniformLocation(shaderProgram, "resolution"),
+                    modelViewMatrix: this.gl.getUniformLocation(shaderProgram, "uModelViewMatrix"),
+                    projectionMatrix: this.gl.getUniformLocation(shaderProgram, "uProjectionMatrix"),
+                    resolution: this.gl.getUniformLocation(shaderProgram, "uResolution"),
                 },
                 createBuffers: () => ({
                     positions: this.gl.createBuffer(),
@@ -308,20 +240,20 @@ const DesmosCustom = {
                 }),
                 attachBuffers: ({positions, colors, tangents, offsets, indices}) => {
                     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, positions);
-                    this.gl.vertexAttribPointer(this.program.lines.attribute.vertexPosition, 3, this.gl.FLOAT, false, 0, 0);
-                    this.gl.enableVertexAttribArray(this.program.lines.attribute.vertexPosition);
+                    this.gl.vertexAttribPointer(this.program.lines.attribute.position, 3, this.gl.FLOAT, false, 0, 0);
+                    this.gl.enableVertexAttribArray(this.program.lines.attribute.position);
         
                     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, colors);
-                    this.gl.vertexAttribPointer(this.program.lines.attribute.vertexColor, 4, this.gl.FLOAT, false, 0, 0);
-                    this.gl.enableVertexAttribArray(this.program.lines.attribute.vertexColor);
+                    this.gl.vertexAttribPointer(this.program.lines.attribute.color, 4, this.gl.FLOAT, false, 0, 0);
+                    this.gl.enableVertexAttribArray(this.program.lines.attribute.color);
 
                     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, tangents);
-                    this.gl.vertexAttribPointer(this.program.lines.attribute.vertexTangent, 3, this.gl.FLOAT, false, 0, 0);
-                    this.gl.enableVertexAttribArray(this.program.lines.attribute.vertexTangent);
+                    this.gl.vertexAttribPointer(this.program.lines.attribute.tangent, 3, this.gl.FLOAT, false, 0, 0);
+                    this.gl.enableVertexAttribArray(this.program.lines.attribute.tangent);
 
                     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, offsets);
-                    this.gl.vertexAttribPointer(this.program.lines.attribute.vertexOffset, 1, this.gl.FLOAT, false, 0, 0);
-                    this.gl.enableVertexAttribArray(this.program.lines.attribute.vertexOffset);
+                    this.gl.vertexAttribPointer(this.program.lines.attribute.offset, 1, this.gl.FLOAT, false, 0, 0);
+                    this.gl.enableVertexAttribArray(this.program.lines.attribute.offset);
                 },
                 generateLineGeometry: (positions, colors, widths, indices) => {
                     let output = {
@@ -460,8 +392,15 @@ const DesmosCustom = {
         setProgram(program, buffers) {
             this.gl.useProgram(program.id);
 
-            this.gl.uniformMatrix4fv(program.uniform.modelView, false, this.grapher.controls.orientation.getModelView());
-            this.gl.uniformMatrix4fv(program.uniform.projection, false, this.grapher.controls.orientation.getProjection());
+            if (program.uniform.modelViewMatrix) {
+                this.gl.uniformMatrix4fv(program.uniform.modelViewMatrix, false, this.grapher.controls.orientation.getModelView());
+            }
+            if (program.uniform.projectionMatrix) {
+                this.gl.uniformMatrix4fv(program.uniform.projectionMatrix, false, this.grapher.controls.orientation.getProjection());
+            }
+            if (program.uniform.lightDirection) {
+                this.gl.uniform3f(program.uniform.lightDirection, this.lightDirection[0], this.lightDirection[2], this.lightDirection[1]);
+            }
             if (program.uniform.resolution) {
                 this.gl.uniform2f(program.uniform.resolution, this.width, this.height);
             }
@@ -531,6 +470,32 @@ const DesmosCustom = {
             layer.setProgram(layer.program.lines, this.buffer);
 
             layer.gl.drawElements(layer.gl.TRIANGLES, indices.length, layer.gl.UNSIGNED_INT, 0);
+        }
+    },
+
+    GraphSketch3D: class {
+        constructor(id, branches) {
+            this.id = id;
+            this.branches = branches || [];
+            this.color = "#000000";
+            this.style = "normal";
+            this.showPOI = false;
+            this.showHighlight = false;
+            this.selected = false;
+            this.tokenHovered = false;
+            this.tokenSelected = false;
+            this.labels = [];
+        }
+
+        updateFrom(previous) {
+            if (!previous) {
+                return;
+            }
+            this.showPOI = previous.showPOI;
+            this.showHighlight = previous.showHighlight;
+            this.selected = previous.selected;
+            this.tokenSelected = previous.tokenSelected;
+            this.tokenHovered = previous.tokenHovered;
         }
     },
 
@@ -632,6 +597,82 @@ const DesmosCustom = {
         }
     },
 
+    Orientation3D: class {
+        constructor(distance, pitch, yaw) {
+            this.__distance = distance;
+            this.__pitch = pitch;
+            this.__yaw = yaw;
+            this.__fieldOfView = 45 * Math.PI / 180;
+            this.__projection = mat4.create();
+        }
+
+        get distance() {
+            return this.__distance;
+        }
+
+        set distance(distance) {
+            return this.__distance = distance;
+        }
+
+        get pitch() {
+            return this.__pitch;
+        }
+
+        set pitch(radians) {
+            return this.__pitch = dcg.clamp(radians, -0.5 * Math.PI, 0.5 * Math.PI);
+        }
+
+        get yaw() {
+            return this.__yaw;
+        }
+
+        set yaw(radians) {
+            return this.__yaw = radians;
+        }
+
+        get fieldOfView() {
+            return this.__fieldOfView;
+        }
+        
+        set fieldOfView(radians) {
+            return this.__fieldOfView = radians;
+        }
+
+        updateProjection(width, height) {
+            if (width > 0 && height > 0) {
+                const aspectRatio = width / height;
+                const zNear = 0.1;
+                const zFar = Infinity;
+                mat4.perspective(this.__projection, this.__fieldOfView, aspectRatio, zNear, zFar);
+            }
+        }
+
+        getModelView() {
+            let matrix = mat4.fromTranslation(mat4.create(), [0.0, 0.0, -this.distance]);
+            mat4.rotate(matrix, matrix, this.pitch, [1, 0, 0]);
+            mat4.rotate(matrix, matrix, this.yaw, [0, 1, 0]);
+            // make z "up" by mapping x -> z, y -> x, z -> y
+            mat4.multiply(matrix, matrix, mat4.fromValues(
+                // this is actually column-major, so rows and columns are flipped. go figure.
+                0, 0, 1, 0,
+                1, 0, 0, 0,
+                0, 1, 0, 0,
+                0, 0, 0, 1,
+            ));
+            return matrix;
+        }
+
+        getProjection() {
+            return this.__projection;
+        }
+
+        equals(other) {
+            return other instanceof DesmosCustom.Orientation3D
+                && mat4.equals(this.getProjection(), other.getProjection())
+                && mat4.equals(this.getModelView(), other.getModelView());
+        }
+    },
+
     Grapher3DControls: class {
         constructor(grapher, controller) {
             this.grapher = grapher;
@@ -657,6 +698,21 @@ const DesmosCustom = {
             dcg.$(window).off(this.name);
         }
 
+        getViewport() {
+            return this.grapher.getProjection().viewport;
+        }
+
+        setViewport(viewport) {
+            if (viewport.isValid(this.controller.getAxisScaleSettings()) && !viewport.equals(this.getViewport())) {
+                let {screen, settings} = this.getProjection();
+                this.grapher._setProjection(new dcg.Projection(screen, viewport, settings));
+            }
+        }
+
+        getProjection() {
+            return this.grapher.getProjection();
+        }
+
         isViewportLocked() {
             let settings = this.grapher.getProjection().settings;
             return settings.config.lockViewport || settings.userLockedViewport;
@@ -667,7 +723,7 @@ const DesmosCustom = {
             this.mousePt = dcg.point(mouseEvent.clientX - left, mouseEvent.clientY - top);
         }
 
-        addMouseWheelEventHandler(){
+        addMouseWheelEventHandler() {
             let e = false;
             let lastWheelX, lastWheelY;
             let n = 0;
@@ -701,6 +757,7 @@ const DesmosCustom = {
                     return;
                 }
                 this.zoomOrientation(original.deltaX, original.deltaY);
+                this.grapher.debounceUserRequestedViewportChange();
                 this.controller.requestRedrawGraph();
             });
         }
@@ -744,6 +801,7 @@ const DesmosCustom = {
                                 isDragging = false;
                                 this.grapher.isDragging = false;
                                 dcg.$(document).off(".graphdrag");
+                                this.grapher.debounceUserRequestedViewportChange();
                                 this.controller.dispatch({ type: "grapher/drag-end" });
                             }
                             this.controller.requestRedrawGraph();
@@ -755,19 +813,21 @@ const DesmosCustom = {
             dcg.$(window).on("keyup" + this.name + " blur" + this.name, resetState);
         }
 
-        applyPanTouchChanges(prevTouches, touches){
+        applyPanTouchChanges(prevTouches, touches) {
             if (this.isViewportLocked()) {
                 return;
             }
             let delta = dcg.point(touches[0].x - prevTouches[0].x, touches[0].y - prevTouches[0].y);
             this.rotateOrientation(delta);
+            this.grapher.debounceUserRequestedViewportChange();
         }
 
-        applyScaleTouchChanges(prevTouches, touches){
+        applyScaleTouchChanges(prevTouches, touches) {
             if (this.isViewportLocked()) {
                 return;
             }
             // TODO
+            this.grapher.debounceUserRequestedViewportChange();
         }
 
         zoomOrientation(deltaX, deltaY) {
@@ -810,7 +870,7 @@ const DesmosCustom = {
             this.settings = settings;
             
             let screen = dcg.defaultScreenSize();
-            let viewport = dcg.defaultViewport(settings).squareYAxis(screen, settings);
+            let viewport = dcg.defaultViewport(settings);
             this.setUserRequestedViewport(viewport);
             this.__projection = new dcg.Projection(screen, viewport, settings);
             
@@ -826,6 +886,17 @@ const DesmosCustom = {
             this.__isRedrawingSlowly = false;
             this.events = undefined; // TODO: api interaction?
             this.viewportController = this.planeGrapher.viewportController;
+        }
+
+        static copyGraphProperties(target, source) {
+            target = dcgSharedModule.Cc(dcg.Lh, target);
+            let state = dcgSharedModule.a({}, target);
+            delete state.viewport;
+            let validated = source.validateSettings(state);
+            for (let prop in validated) {
+                source.setProperty(prop, validated[prop]);
+            }
+            return target;
         }
 
         get planeGrapher() {
@@ -981,12 +1052,34 @@ const DesmosCustom = {
             }
         }
 
-        getState(e) {
-            return this.planeGrapher.getState(e);
+        getState(opts) {
+            let viewport = dcgSharedModule.a({}, this.getCurrentViewport());
+            let state = {viewport};
+            this.settings.stateProperties.forEach((prop) => {
+                if (prop !== "randomSeed") {
+                    state[prop] = this.settings[prop];
+                }
+            });
+            if (opts.stripDefaults) {
+                state = dcgSharedModule.Ac(dcg.Lh, i);
+            }
+            return state;
         }
 
         setGrapherState(state, opts) {
             this.planeGrapher.setGrapherState(state, opts);
+
+            if (!opts || !opts.doNotClear) {
+                this.clear();
+            }
+            state = DesmosCustom.Grapher3D.copyGraphProperties(state, this.settings);
+            if ("viewport" in state) {
+                let viewport = dcg.Viewport.fromObject(state.viewport);
+                this.setUserRequestedViewport(viewport);
+                this.viewportController.setViewport(viewport);
+            }
+
+            this.controller.requestRedrawGraph();
         }
 
         getProjection() {
@@ -999,26 +1092,29 @@ const DesmosCustom = {
         }
 
         getCurrentViewport() {
-            return this.planeGrapher.getCurrentViewport();
+            return this.controls.getViewport().toObject();
         }
 
         getUserRequestedViewport() {
-            return this.planeGrapher.getUserRequestedViewport();
+            return this._lastUserRequestedViewport;
         }
 
         setUserRequestedViewport(viewport) {
-            this.planeGrapher.setUserRequestedViewport(viewport);
+            // i couldn't figure out how to get the viewport to update otherwise
+            if (this._lastUserRequestedViewport) {
+                let lastViewport = dcg.Viewport.fromObject(this._lastUserRequestedViewport);
+                if (!lastViewport.equals(viewport)) {
+                    this.controls.setViewport(dcg.Viewport.fromObject(viewport));
+                }
+            }
+            this._lastUserRequestedViewport = dcgSharedModule.j(viewport);
         }
 
         debounceUserRequestedViewportChange() {
-            this.planeGrapher.debounceUserRequestedViewportChange();
-        }
-
-        /*debounceUserRequestedViewportChange() {
-            this.__debouncedViewportCommit ||= dcg.commitFunction((viewport, token) => {
+            /*this.__debouncedViewportCommit ||= dcg.commitFunction((viewport, token) => {
                 if (!this.isDragging && this._lastUserRequestedViewportUpdateToken === token) {
                     if (this._lastUserRequestedViewport) {
-                        let lastViewport = this.computeConcreteViewport(dcg.Viewport.fromObject(this._lastUserRequestedViewport));
+                        let lastViewport = dcg.Viewport.fromObject(this._lastUserRequestedViewport);
                         if (lastViewport.equals(viewport)) {
                             return;
                         }
@@ -1026,11 +1122,16 @@ const DesmosCustom = {
                     this.controller.dispatch({ type: "commit-user-requested-viewport", viewport });
                 }
             }, 1000);
-            this.__debouncedViewportCommit(this.getCurrentViewport(), this._lastUserRequestedViewportUpdateToken)
-        }*/
+            this.__debouncedViewportCommit(this.getCurrentViewport(), this._lastUserRequestedViewportUpdateToken)*/
+        }
 
         getUndoRedoState() {
-            return this.planeGrapher.getUndoRedoState();
+            let state = {};
+            this.settings.stateProperties.forEach(prop => {
+                state[prop] = this.settings[prop];
+            });
+            state.viewport = this.getUserRequestedViewport();
+            return state;
         }
 
         getDefaultViewport() {
