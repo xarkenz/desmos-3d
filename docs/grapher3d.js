@@ -24,11 +24,81 @@ grapher3d references:
 
 const DesmosCustom = {
     GeometryBuffer: class {
-        constructor() {
-            this.channels = {};
+        constructor(gl, attributes) {
+            this.indices = { buffer: gl.createBuffer(), array: null };
+            this.attributes = {};
+            for (let {name, id, channels} of attributes) {
+                this.attributes[name] = { id, channels, buffer: gl.createBuffer(), array: null };
+            }
+            this.__vertexCount = 0;
         }
 
-        //addChannel
+        clear() {
+            this.indices.array = null;
+            for (let name of Object.keys(this.attributes)) {
+                this.attributes[name].array = null;
+            }
+            this.__vertexCount = 0;
+        }
+
+        addGeometry({indices, ...attributes}) {
+            if (!this.indices.array) {
+                this.indices.array = new Uint32Array(indices);
+            } else {
+                let origIndices = this.indices.array;
+                this.indices.array = new Uint32Array(origIndices.length + indices.length);
+                this.indices.array.set(origIndices);
+                this.indices.array.set(indices.map(index => index + this.__vertexCount), origIndices.length);
+            }
+
+            let vertexCount = 0;
+            for (let name of Object.keys(this.attributes)) {
+                let calcVertexCount = attributes[name].length / this.attributes[name].channels;
+                if (vertexCount === 0) {
+                    vertexCount = calcVertexCount;
+                } else if (calcVertexCount !== vertexCount) {
+                    throw new Error("conflicting vertex counts");
+                }
+
+                if (!this.attributes[name].array) {
+                    this.attributes[name].array = new Float32Array(attributes[name]);
+                } else {
+                    let origArray = this.attributes[name].array;
+                    this.attributes[name].array = new Float32Array(origArray.length + attributes[name].length);
+                    this.attributes[name].array.set(origArray);
+                    this.attributes[name].array.set(attributes[name], origArray.length);
+                }
+            }
+            this.__vertexCount += vertexCount;
+        }
+
+        upload(gl) {
+            if (!this.indices.array) {
+                return;
+            }
+
+            for (let name of Object.keys(this.attributes)) {
+                gl.bindBuffer(gl.ARRAY_BUFFER, this.attributes[name].buffer);
+                gl.bufferData(gl.ARRAY_BUFFER, this.attributes[name].array, gl.DYNAMIC_DRAW);
+            }
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indices.buffer);
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, this.indices.array, gl.DYNAMIC_DRAW);
+        }
+
+        draw(gl) {
+            if (!this.indices.array) {
+                return;
+            }
+
+            for (let name of Object.keys(this.attributes)) {
+                gl.bindBuffer(gl.ARRAY_BUFFER, this.attributes[name].buffer);
+                gl.vertexAttribPointer(this.attributes[name].id, this.attributes[name].channels, gl.FLOAT, false, 0, 0);
+                gl.enableVertexAttribArray(this.attributes[name].id);
+            }
+
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indices.buffer);
+            gl.drawElements(gl.TRIANGLES, this.indices.array.length, gl.UNSIGNED_INT, 0);
+        }
     },
 
     WebGLLayer: class extends dcg.View.Class {
@@ -137,6 +207,7 @@ const DesmosCustom = {
                 attribute: {
                     // guarantee that there is an attribute bound at location 0 so the browser doesn't have to do expensive emulation; see
                     // https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/WebGL_best_practices#always_enable_vertex_attrib_0_as_an_array
+                    // (i don't know whether this is necessary to do here...)
                     position: (this.gl.bindAttribLocation(shaderProgram, 0, "aPosition"), 0),
                     color: this.gl.getAttribLocation(shaderProgram, "aColor"),
                     normal: this.gl.getAttribLocation(shaderProgram, "aNormal"),
@@ -146,25 +217,11 @@ const DesmosCustom = {
                     projectionMatrix: this.gl.getUniformLocation(shaderProgram, "uProjectionMatrix"),
                     lightDirection: this.gl.getUniformLocation(shaderProgram, "uLightDirection"),
                 },
-                createBuffers: () => ({
-                    positions: this.gl.createBuffer(),
-                    colors: this.gl.createBuffer(),
-                    normals: this.gl.createBuffer(),
-                    indices: this.gl.createBuffer(),
-                }),
-                attachBuffers: ({positions, colors, normals, indices}) => {
-                    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, positions);
-                    this.gl.vertexAttribPointer(this.program.triangles.attribute.position, 3, this.gl.FLOAT, false, 0, 0);
-                    this.gl.enableVertexAttribArray(this.program.triangles.attribute.position);
-        
-                    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, colors);
-                    this.gl.vertexAttribPointer(this.program.triangles.attribute.color, 3, this.gl.FLOAT, false, 0, 0);
-                    this.gl.enableVertexAttribArray(this.program.triangles.attribute.color);
-
-                    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, normals);
-                    this.gl.vertexAttribPointer(this.program.triangles.attribute.normal, 3, this.gl.FLOAT, false, 0, 0);
-                    this.gl.enableVertexAttribArray(this.program.triangles.attribute.normal);
-                }
+                createBuffer: () => new DesmosCustom.GeometryBuffer(this.gl, [
+                    { name: "position", id: this.program.triangles.attribute.position, channels: 3 },
+                    { name: "color", id: this.program.triangles.attribute.color, channels: 3 },
+                    { name: "normal", id: this.program.triangles.attribute.normal, channels: 3 },
+                ]),
             };
 
             shaderProgram = this.createShaderProgram([
@@ -221,6 +278,7 @@ const DesmosCustom = {
                 attribute: {
                     // guarantee that there is an attribute bound at location 0 so the browser doesn't have to do expensive emulation; see
                     // https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/WebGL_best_practices#always_enable_vertex_attrib_0_as_an_array
+                    // (i don't know whether this is necessary to do here...)
                     position: (this.gl.bindAttribLocation(shaderProgram, 0, "aPosition"), 0),
                     color: this.gl.getAttribLocation(shaderProgram, "aColor"),
                     tangent: this.gl.getAttribLocation(shaderProgram, "aTangent"),
@@ -231,62 +289,44 @@ const DesmosCustom = {
                     projectionMatrix: this.gl.getUniformLocation(shaderProgram, "uProjectionMatrix"),
                     resolution: this.gl.getUniformLocation(shaderProgram, "uResolution"),
                 },
-                createBuffers: () => ({
-                    positions: this.gl.createBuffer(),
-                    colors: this.gl.createBuffer(),
-                    tangents: this.gl.createBuffer(),
-                    offsets: this.gl.createBuffer(),
-                    indices: this.gl.createBuffer(),
-                }),
-                attachBuffers: ({positions, colors, tangents, offsets, indices}) => {
-                    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, positions);
-                    this.gl.vertexAttribPointer(this.program.lines.attribute.position, 3, this.gl.FLOAT, false, 0, 0);
-                    this.gl.enableVertexAttribArray(this.program.lines.attribute.position);
-        
-                    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, colors);
-                    this.gl.vertexAttribPointer(this.program.lines.attribute.color, 4, this.gl.FLOAT, false, 0, 0);
-                    this.gl.enableVertexAttribArray(this.program.lines.attribute.color);
-
-                    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, tangents);
-                    this.gl.vertexAttribPointer(this.program.lines.attribute.tangent, 3, this.gl.FLOAT, false, 0, 0);
-                    this.gl.enableVertexAttribArray(this.program.lines.attribute.tangent);
-
-                    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, offsets);
-                    this.gl.vertexAttribPointer(this.program.lines.attribute.offset, 1, this.gl.FLOAT, false, 0, 0);
-                    this.gl.enableVertexAttribArray(this.program.lines.attribute.offset);
-                },
-                generateLineGeometry: (positions, colors, widths, indices) => {
+                createBuffer: () => new DesmosCustom.GeometryBuffer(this.gl, [
+                    { name: "position", id: this.program.lines.attribute.position, channels: 3 },
+                    { name: "color", id: this.program.lines.attribute.color, channels: 4 },
+                    { name: "tangent", id: this.program.lines.attribute.tangent, channels: 3 },
+                    { name: "offset", id: this.program.lines.attribute.offset, channels: 1 },
+                ]),
+                generateLineGeometry: (position, color, width, indices) => {
                     let output = {
-                        positions: new Float32Array(indices.length * 6),
-                        colors: new Float32Array(indices.length * 8),
-                        tangents: new Float32Array(indices.length * 6),
-                        offsets: new Float32Array(indices.length * 2),
+                        position: new Float32Array(indices.length * 6),
+                        color: new Float32Array(indices.length * 8),
+                        tangent: new Float32Array(indices.length * 6),
+                        offset: new Float32Array(indices.length * 2),
                         indices: new Uint32Array(indices.length * 3),
                     };
                     for (let element = 0; element < indices.length; element += 2) {
                         let index0 = indices[element + 0];
                         let index1 = indices[element + 1];
 
-                        let data = positions.slice(index0 * 3 + 0, index0 * 3 + 3);
-                        output.positions.set(data, element * 6 + 0);
-                        output.positions.set(data, element * 6 + 3);
-                        output.tangents.set(data, element * 6 + 6);
-                        output.tangents.set(data, element * 6 + 9);
-                        data = positions.slice(index1 * 3 + 0, index1 * 3 + 3);
-                        output.tangents.set(data, element * 6 + 0);
-                        output.tangents.set(data, element * 6 + 3);
-                        output.positions.set(data, element * 6 + 6);
-                        output.positions.set(data, element * 6 + 9);
-                        data = colors.slice(index0 * 4 + 0, index0 * 4 + 4);
-                        output.colors.set(data, element * 8 + 0);
-                        output.colors.set(data, element * 8 + 4);
-                        data = colors.slice(index1 * 4 + 0, index1 * 4 + 4);
-                        output.colors.set(data, element * 8 + 8);
-                        output.colors.set(data, element * 8 + 12);
-                        output.offsets[element * 2 + 0] = 0.5 * widths[index0];
-                        output.offsets[element * 2 + 1] = -0.5 * widths[index0];
-                        output.offsets[element * 2 + 2] = 0.5 * widths[index1];
-                        output.offsets[element * 2 + 3] = -0.5 * widths[index1];
+                        let data = position.slice(index0 * 3 + 0, index0 * 3 + 3);
+                        output.position.set(data, element * 6 + 0);
+                        output.position.set(data, element * 6 + 3);
+                        output.tangent.set(data, element * 6 + 6);
+                        output.tangent.set(data, element * 6 + 9);
+                        data = position.slice(index1 * 3 + 0, index1 * 3 + 3);
+                        output.tangent.set(data, element * 6 + 0);
+                        output.tangent.set(data, element * 6 + 3);
+                        output.position.set(data, element * 6 + 6);
+                        output.position.set(data, element * 6 + 9);
+                        data = color.slice(index0 * 4 + 0, index0 * 4 + 4);
+                        output.color.set(data, element * 8 + 0);
+                        output.color.set(data, element * 8 + 4);
+                        data = color.slice(index1 * 4 + 0, index1 * 4 + 4);
+                        output.color.set(data, element * 8 + 8);
+                        output.color.set(data, element * 8 + 12);
+                        output.offset[element * 2 + 0] = 0.5 * width[index0];
+                        output.offset[element * 2 + 1] = -0.5 * width[index0];
+                        output.offset[element * 2 + 2] = 0.5 * width[index1];
+                        output.offset[element * 2 + 3] = -0.5 * width[index1];
 
                         output.indices[element * 3 + 0] = element * 2 + 0;
                         output.indices[element * 3 + 1] = element * 2 + 1;
@@ -389,7 +429,7 @@ const DesmosCustom = {
             this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
         }
 
-        setProgram(program, buffers) {
+        setProgram(program) {
             this.gl.useProgram(program.id);
 
             if (program.uniform.modelViewMatrix) {
@@ -404,8 +444,6 @@ const DesmosCustom = {
             if (program.uniform.resolution) {
                 this.gl.uniform2f(program.uniform.resolution, this.width, this.height);
             }
-
-            program.attachBuffers(buffers);
         }
 
         setBackgroundColor(color = "#ffffff") {
@@ -433,43 +471,59 @@ const DesmosCustom = {
         constructor(grapher) {
             this.grapher = grapher;
             this.buffer = null;
+            this.__cachedState = null;
         }
 
         redrawToGL(layer, projection) {
-            this.buffer ||= layer.program.lines.createBuffers();
+            let state = Object.assign(projection.viewport.toObject(), {
+                axisOpacity: this.grapher.settings.axisOpacity,
+                majorOpacity: this.grapher.settings.majorAxisOpacity,
+                minorOpacity: this.grapher.settings.minorAxisOpacity,
+            });
+            if (!dcg.isEqual(state, this.__cachedState)) {
+                this.__cachedState = state;
 
-            let {positions, colors, tangents, offsets, indices} = layer.program.lines.generateLineGeometry([
-                projection.viewport.xmin,0,0, projection.viewport.xmax,0,0, 0,projection.viewport.ymin,0, 0,projection.viewport.ymax,0, 0,0,projection.viewport.zmin, 0,0,projection.viewport.zmax,
-                projection.viewport.xmin,projection.viewport.ymin,0, projection.viewport.xmax,projection.viewport.ymin,0, projection.viewport.xmax,projection.viewport.ymax,0, projection.viewport.xmin,projection.viewport.ymax,0,
-                projection.viewport.xmax,0,0, projection.viewport.xmax+0.25,0,0, 0,projection.viewport.ymax,0, 0,projection.viewport.ymax+0.25,0, 0,0,projection.viewport.zmax, 0,0,projection.viewport.zmax+0.25,
-            ], [
-                0,0,0,this.grapher.settings.axisOpacity, 0,0,0,this.grapher.settings.axisOpacity, 0,0,0,this.grapher.settings.axisOpacity, 0,0,0,this.grapher.settings.axisOpacity, 0,0,0,this.grapher.settings.axisOpacity, 0,0,0,this.grapher.settings.axisOpacity,
-                0,0,0,this.grapher.settings.majorAxisOpacity, 0,0,0,this.grapher.settings.majorAxisOpacity, 0,0,0,this.grapher.settings.majorAxisOpacity, 0,0,0,this.grapher.settings.majorAxisOpacity,
-                0,0,0,this.grapher.settings.axisOpacity, 0,0,0,this.grapher.settings.axisOpacity, 0,0,0,this.grapher.settings.axisOpacity, 0,0,0,this.grapher.settings.axisOpacity, 0,0,0,this.grapher.settings.axisOpacity, 0,0,0,this.grapher.settings.axisOpacity,
-            ], [
-                2, 2, 2, 2, 2, 2,
-                2, 2, 2, 2,
-                20, 0, 20, 0, 20, 0,
-            ], [
-                0,1, 2,3, 4,5,
-                6,7, 7,8, 8,9, 9,6,
-                10,11, 12,13, 14,15,
-            ]);
+                if (!this.buffer) {
+                    this.buffer = layer.program.lines.createBuffer();
+                } else {
+                    this.buffer.clear();
+                }
 
-            layer.gl.bindBuffer(layer.gl.ARRAY_BUFFER, this.buffer.positions);
-            layer.gl.bufferData(layer.gl.ARRAY_BUFFER, positions, layer.gl.DYNAMIC_DRAW);
-            layer.gl.bindBuffer(layer.gl.ARRAY_BUFFER, this.buffer.colors);
-            layer.gl.bufferData(layer.gl.ARRAY_BUFFER, colors, layer.gl.DYNAMIC_DRAW);
-            layer.gl.bindBuffer(layer.gl.ARRAY_BUFFER, this.buffer.tangents);
-            layer.gl.bufferData(layer.gl.ARRAY_BUFFER, tangents, layer.gl.DYNAMIC_DRAW);
-            layer.gl.bindBuffer(layer.gl.ARRAY_BUFFER, this.buffer.offsets);
-            layer.gl.bufferData(layer.gl.ARRAY_BUFFER, offsets, layer.gl.DYNAMIC_DRAW);
-            layer.gl.bindBuffer(layer.gl.ELEMENT_ARRAY_BUFFER, this.buffer.indices);
-            layer.gl.bufferData(layer.gl.ELEMENT_ARRAY_BUFFER, indices, layer.gl.DYNAMIC_DRAW);
+                // TODO: more grid settings (needs desmos patch)
+                const MAJOR_STEP = 1;
+                const MINOR_SUBDIV_COUNT = 2;
 
-            layer.setProgram(layer.program.lines, this.buffer);
+                let position = [
+                    // axis lines
+                    state.xmin,0,0, state.xmax,0,0, 0,state.ymin,0, 0,state.ymax,0, 0,0,state.zmin, 0,0,state.zmax,
+                    // axis arrow tips
+                    state.xmax,0,0, state.xmax+0.25,0,0, 0,state.ymax,0, 0,state.ymax+0.25,0, 0,0,state.zmax, 0,0,state.zmax+0.25,
+                ];
+                let color = [
+                    // axis lines
+                    0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity,
+                    // axis arrow tips
+                    0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity,
+                ];
+                let width = [
+                    // axis lines
+                    2, 2, 2, 2, 2, 2,
+                    // axis arrow tips (this is where the magic happens)
+                    20, 0, 20, 0, 20, 0,
+                ];
+                let indices = [
+                    // axis lines
+                    0,1, 2,3, 4,5,
+                    // axis arrow tips
+                    6,7, 8,9, 10,11,
+                ];
 
-            layer.gl.drawElements(layer.gl.TRIANGLES, indices.length, layer.gl.UNSIGNED_INT, 0);
+                this.buffer.addGeometry(layer.program.lines.generateLineGeometry(position, color, width, indices));
+                this.buffer.upload(layer.gl);
+            }
+
+            layer.setProgram(layer.program.lines);
+            this.buffer.draw(layer.gl);
         }
     },
 
@@ -503,36 +557,54 @@ const DesmosCustom = {
         constructor(controller, settings) {
             this.controller = controller;
             this.settings = settings;
-            this.buffer = {};
+            this.meshBuffer = null;
+            this.curveBuffer = null;
         }
 
         redrawToGL(layer, projection, sketches, sketchOrder) {
+            if (!this.meshBuffer) {
+                this.meshBuffer = layer.program.triangles.createBuffer();
+            } else {
+                this.meshBuffer.clear();
+            }
+            if (!this.curveBuffer) {
+                this.curveBuffer = layer.program.lines.createBuffer();
+            } else {
+                this.curveBuffer.clear();
+            }
+
             sketchOrder.forEach((sketchID) => {
                 let sketch = sketches[sketchID];
                 if (sketch) {
-                    this.drawSketchToGL(sketch, layer, projection);
+                    this.addSketch(sketch, layer, projection);
                 }
-            })
+            });
+
+            this.meshBuffer.upload(layer.gl);
+            this.curveBuffer.upload(layer.gl);
+
+            layer.setProgram(layer.program.triangles);
+            this.meshBuffer.draw(layer.gl);
+            layer.setProgram(layer.program.lines);
+            this.curveBuffer.draw(layer.gl);
         }
 
-        drawSketchToGL(sketch, layer, projection) {
+        addSketch(sketch, layer, projection) {
             if (!sketch.branches || !sketch.branches.length) {
                 return;
             }
-            this.buffer.triangles ||= layer.program.triangles.createBuffers();
-            this.buffer.lines ||= layer.program.lines.createBuffers();
             sketch.branches.forEach((branch) => {
                 switch (branch.graphMode) {
                     case dcg.GraphMode.CURVE_3D_PARAMETRIC:
                     case dcg.GraphMode.CURVE_3D_XY_GRAPH:
-                        this.drawCurveToGL(layer, layer.colorFromHex(branch.color), 1, branch.thickness, branch.points);
+                        this.addCurve(layer, layer.colorFromHex(branch.color), 1, branch.thickness, branch.points);
                         break;
                     case dcg.GraphMode.SURFACE_PARAMETRIC:
                     case dcg.GraphMode.SURFACE_Z_BASED:
                     case dcg.GraphMode.SURFACE_X_BASED:
                     case dcg.GraphMode.SURFACE_Y_BASED:
                     case dcg.GraphMode.SURFACE_IMPLICIT:
-                        this.drawMeshToGL(layer, layer.colorFromHex(branch.color), branch.meshData);
+                        this.addMesh(layer, layer.colorFromHex(branch.color), branch.meshData);
                         break;
                     default:
                         break;
@@ -540,60 +612,35 @@ const DesmosCustom = {
             });
         }
 
-        drawMeshToGL(layer, color, {positions, normals, uvs, faces: indices}) {
-            let colors = new Float32Array(positions.length);
-            for (let colorIndex = 0; colorIndex < colors.length; colorIndex += 3) {
-                colors.set(color, colorIndex);
+        addMesh(layer, uniformColor, {positions: position, normals: normal, uvs: uv, faces: indices}) {
+            let color = new Float32Array(position.length);
+            for (let colorIndex = 0; colorIndex < color.length; colorIndex += 3) {
+                color.set(uniformColor, colorIndex);
             }
 
-            layer.gl.bindBuffer(layer.gl.ARRAY_BUFFER, this.buffer.triangles.positions);
-            layer.gl.bufferData(layer.gl.ARRAY_BUFFER, positions, layer.gl.DYNAMIC_DRAW);
-            layer.gl.bindBuffer(layer.gl.ARRAY_BUFFER, this.buffer.triangles.colors);
-            layer.gl.bufferData(layer.gl.ARRAY_BUFFER, colors, layer.gl.DYNAMIC_DRAW);
-            layer.gl.bindBuffer(layer.gl.ARRAY_BUFFER, this.buffer.triangles.normals);
-            layer.gl.bufferData(layer.gl.ARRAY_BUFFER, normals, layer.gl.DYNAMIC_DRAW);
-            layer.gl.bindBuffer(layer.gl.ELEMENT_ARRAY_BUFFER, this.buffer.triangles.indices);
-            layer.gl.bufferData(layer.gl.ELEMENT_ARRAY_BUFFER, indices, layer.gl.DYNAMIC_DRAW);
-
-            layer.setProgram(layer.program.triangles, this.buffer.triangles);
-
-            layer.gl.drawElements(layer.gl.TRIANGLES, indices.length, layer.gl.UNSIGNED_INT, 0);
+            this.meshBuffer.addGeometry({ position, color, normal, indices })
         }
 
-        drawCurveToGL(layer, color, opacity, thickness, points) {
+        addCurve(layer, uniformColor, opacity, thickness, points) {
             if (!points) {
                 return;
             }
+
             let pointCount = points.length / 3;
-            let origColors = new Float32Array(pointCount * 4);
-            for (let colorIndex = 0; colorIndex < origColors.length; colorIndex += 4) {
-                origColors.set(color, colorIndex);
-                origColors[colorIndex + 3] = opacity;
+            let color = new Float32Array(pointCount * 4);
+            for (let colorIndex = 0; colorIndex < color.length; colorIndex += 4) {
+                color.set(uniformColor, colorIndex);
+                color[colorIndex + 3] = opacity;
             }
-            let origWidths = new Float32Array(pointCount);
-            origWidths.fill(thickness * 4);
-            let origIndices = new Uint32Array((pointCount - 1) * 2);
+            let width = new Float32Array(pointCount);
+            width.fill(thickness * 4);
+            let indices = new Uint32Array((pointCount - 1) * 2);
             for (let index = 0; index + 1 < pointCount; index++) {
-                origIndices[index * 2 + 0] = index + 0;
-                origIndices[index * 2 + 1] = index + 1;
+                indices[index * 2 + 0] = index + 0;
+                indices[index * 2 + 1] = index + 1;
             }
 
-            let {positions, colors, tangents, offsets, indices} = layer.program.lines.generateLineGeometry(points, origColors, origWidths, origIndices);
-
-            layer.gl.bindBuffer(layer.gl.ARRAY_BUFFER, this.buffer.lines.positions);
-            layer.gl.bufferData(layer.gl.ARRAY_BUFFER, positions, layer.gl.DYNAMIC_DRAW);
-            layer.gl.bindBuffer(layer.gl.ARRAY_BUFFER, this.buffer.lines.colors);
-            layer.gl.bufferData(layer.gl.ARRAY_BUFFER, colors, layer.gl.DYNAMIC_DRAW);
-            layer.gl.bindBuffer(layer.gl.ARRAY_BUFFER, this.buffer.lines.tangents);
-            layer.gl.bufferData(layer.gl.ARRAY_BUFFER, tangents, layer.gl.DYNAMIC_DRAW);
-            layer.gl.bindBuffer(layer.gl.ARRAY_BUFFER, this.buffer.lines.offsets);
-            layer.gl.bufferData(layer.gl.ARRAY_BUFFER, offsets, layer.gl.DYNAMIC_DRAW);
-            layer.gl.bindBuffer(layer.gl.ELEMENT_ARRAY_BUFFER, this.buffer.lines.indices);
-            layer.gl.bufferData(layer.gl.ELEMENT_ARRAY_BUFFER, indices, layer.gl.DYNAMIC_DRAW);
-
-            layer.setProgram(layer.program.lines, this.buffer.lines);
-
-            layer.gl.drawElements(layer.gl.TRIANGLES, indices.length, layer.gl.UNSIGNED_INT, 0);
+            this.curveBuffer.addGeometry(layer.program.lines.generateLineGeometry(points, color, width, indices));
         }
     },
 
