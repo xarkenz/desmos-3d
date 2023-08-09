@@ -564,16 +564,16 @@ const DesmosCustom = {
             if (!points) {
                 return;
             }
-            let count = points.length / 3;
-            let origColors = new Float32Array(count * 4);
+            let pointCount = points.length / 3;
+            let origColors = new Float32Array(pointCount * 4);
             for (let colorIndex = 0; colorIndex < origColors.length; colorIndex += 4) {
                 origColors.set(color, colorIndex);
                 origColors[colorIndex + 3] = opacity;
             }
-            let origWidths = new Float32Array(count / 3);
+            let origWidths = new Float32Array(pointCount);
             origWidths.fill(thickness * 4);
-            let origIndices = new Uint32Array((count - 1) * 2);
-            for (let index = 0; index + 1 < count; index++) {
+            let origIndices = new Uint32Array((pointCount - 1) * 2);
+            for (let index = 0; index + 1 < pointCount; index++) {
                 origIndices[index * 2 + 0] = index + 0;
                 origIndices[index * 2 + 1] = index + 1;
             }
