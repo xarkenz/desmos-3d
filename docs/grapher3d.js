@@ -23,6 +23,45 @@ grapher3d references:
 */
 
 const DesmosCustom = {
+    range: function*(start, end = null, step = 1) {
+        if (end == null) {
+            end = start;
+            start = 0;
+        }
+        for (let item = start; item < end; item += step) {
+            yield item;
+        }
+    },
+
+    enumerate: function*(iterator) {
+        let index = 0;
+        for (let item of iterator) {
+            yield [index++, item];
+        }
+    },
+
+    map: function*(iterator, mapFn) {
+        for (let [index, item] of DesmosCustom.enumerate(iterator)) {
+            yield mapFn(item, index);
+        }
+    },
+
+    filter: function*(iterator, filterFn) {
+        for (let [index, item] of DesmosCustom.enumerate(iterator)) {
+            if (filterFn(item, index)) {
+                yield item;
+            }
+        }
+    },
+
+    filterMap: function*(iterator, filterFn, mapFn) {
+        for (let [index, item] of DesmosCustom.enumerate(iterator)) {
+            if (filterFn(item, index)) {
+                yield mapFn(item, index);
+            }
+        }
+    },
+
     GeometryBuffer: class {
         constructor(gl, attributes) {
             this.indices = { buffer: gl.createBuffer(), array: null };
@@ -222,6 +261,60 @@ const DesmosCustom = {
                     { name: "color", id: this.program.triangles.attribute.color, channels: 3 },
                     { name: "normal", id: this.program.triangles.attribute.normal, channels: 3 },
                 ]),
+                generateSphereGeometry: ([cx, cy, cz], radius, uniformColor, latitudes = 20, longitudes = 20) => {
+                    // 1 top, 1 bottom, (latitudes - 1) layers between, (longitudes) points in each layer
+                    let pointCount = 2 + (latitudes - 1) * longitudes;
+                    let position = new Float32Array(pointCount * 3);
+                    position.set([cx, cy, cz + radius, cx, cy, cz - radius]);
+                    let color = new Float32Array(pointCount * 3);
+                    for (let colorIndex = 0; colorIndex < color.length; colorIndex += 3) {
+                        color.set(uniformColor, colorIndex);
+                    }
+                    let normal = new Float32Array(pointCount * 3);
+                    normal.set([0, 0, Math.sign(radius), 0, 0, -Math.sign(radius)]);
+                    // for each longitude: 1 top, 1 bottom, 2 for each of the (latitudes - 2) quads
+                    let triangleCount = ((latitudes - 2) * 2 + 2) * longitudes;
+                    let indices = new Uint32Array(triangleCount * 3);
+
+                    let longitudeDirections = Array.from(DesmosCustom.map(DesmosCustom.range(longitudes), (longitude) => {
+                        let radians = 2 * Math.PI * longitude / longitudes;
+                        return [Math.cos(radians), Math.sin(radians)];
+                    }));
+
+                    for (let latitude = 1, index = 2; latitude < latitudes; latitude++, index += longitudes) {
+                        let z = Math.cos(Math.PI * latitude / latitudes);
+                        let layerScale = Math.sin(Math.PI * latitude / latitudes);
+                        position.set(longitudeDirections.flatMap(([x, y]) => [x * layerScale * radius + cx, y * layerScale * radius + cy, z * radius + cz]), index * 3);
+                        normal.set(longitudeDirections.flatMap(([x, y]) => [x * layerScale, y * layerScale, z]), index * 3);
+                    }
+
+                    for (let longitude = 0; longitude < longitudes; longitude++) {
+                        let nextLongitude = (longitude + 1) % longitudes;
+                        // add top triangle
+                        indices[longitude * 3 + 0] = 0;
+                        indices[longitude * 3 + 1] = 2 + longitude;
+                        indices[longitude * 3 + 2] = 2 + nextLongitude;
+                        // add bottom triangle
+                        indices[(longitudes + longitude) * 3 + 0] = 1;
+                        indices[(longitudes + longitude) * 3 + 1] = pointCount - 1 - longitude;
+                        indices[(longitudes + longitude) * 3 + 2] = pointCount - 1 - nextLongitude;
+                        // add 2 triangles for each quad in the longitude
+                        for (let layer = 0, nextLayer = 1, index = 2 * longitudes + 2 * longitude; nextLayer < latitudes - 1; layer++, nextLayer++, index += 2 * longitudes) {
+                            let point0 = 2 + layer * longitudes + longitude;
+                            let point1 = 2 + layer * longitudes + nextLongitude;
+                            let point2 = 2 + nextLayer * longitudes + nextLongitude;
+                            let point3 = 2 + nextLayer * longitudes + longitude;
+                            indices[index * 3 + 0] = point0;
+                            indices[index * 3 + 1] = point1;
+                            indices[index * 3 + 2] = point2;
+                            indices[index * 3 + 3] = point2;
+                            indices[index * 3 + 4] = point3;
+                            indices[index * 3 + 5] = point0;
+                        }
+                    }
+
+                    return { position, color, normal, indices };
+                },
             };
 
             shaderProgram = this.createShaderProgram([
@@ -594,31 +687,35 @@ const DesmosCustom = {
                 return;
             }
             sketch.branches.forEach((branch) => {
+                let color = layer.colorFromHex(branch.color);
                 switch (branch.graphMode) {
                     case dcg.GraphMode.CURVE_3D_PARAMETRIC:
                     case dcg.GraphMode.CURVE_3D_XY_GRAPH:
-                        this.addCurve(layer, layer.colorFromHex(branch.color), 1, branch.thickness, branch.points);
+                        this.addCurve(layer, color, 1, branch.thickness, branch.points);
                         break;
                     case dcg.GraphMode.SURFACE_PARAMETRIC:
                     case dcg.GraphMode.SURFACE_Z_BASED:
                     case dcg.GraphMode.SURFACE_X_BASED:
                     case dcg.GraphMode.SURFACE_Y_BASED:
                     case dcg.GraphMode.SURFACE_IMPLICIT:
-                        this.addMesh(layer, layer.colorFromHex(branch.color), branch.meshData);
+                        this.addMesh(layer, color, branch.meshData);
+                        break;
+                    case dcg.GraphMode.POINT_3D:
+                        this.addPoint(layer, color, branch.position, branch.radius);
+                        break;
+                    case dcg.GraphMode.TRIANGLE_3D:
+                        this.addMesh(layer, color, branch.meshData);
+                        break;
+                    case dcg.GraphMode.SPHERE:
+                        this.addSphere(layer, color, branch.position, branch.radius);
+                        break;
+                    case dcg.GraphMode.SEGMENT_3D:
+                        this.addCurve(layer, color, 1, branch.thickness, branch.points);
                         break;
                     default:
                         break;
                 }
             });
-        }
-
-        addMesh(layer, uniformColor, {positions: position, normals: normal, uvs: uv, faces: indices}) {
-            let color = new Float32Array(position.length);
-            for (let colorIndex = 0; colorIndex < color.length; colorIndex += 3) {
-                color.set(uniformColor, colorIndex);
-            }
-
-            this.meshBuffer.addGeometry({ position, color, normal, indices })
         }
 
         addCurve(layer, uniformColor, opacity, thickness, points) {
@@ -641,6 +738,23 @@ const DesmosCustom = {
             }
 
             this.curveBuffer.addGeometry(layer.program.lines.generateLineGeometry(points, color, width, indices));
+        }
+
+        addMesh(layer, uniformColor, {positions: position, normals: normal, uvs: uv, faces: indices}) {
+            let color = new Float32Array(position.length);
+            for (let colorIndex = 0; colorIndex < color.length; colorIndex += 3) {
+                color.set(uniformColor, colorIndex);
+            }
+
+            this.meshBuffer.addGeometry({ position, color, normal, indices })
+        }
+
+        addPoint(layer, uniformColor, center, radius) {
+            this.addSphere(layer, uniformColor, center, radius); // TODO: i don't like points being spheres :(
+        }
+
+        addSphere(layer, uniformColor, center, radius) {
+            this.meshBuffer.addGeometry(layer.program.triangles.generateSphereGeometry(center, radius, uniformColor));
         }
     },
 
@@ -1108,7 +1222,7 @@ const DesmosCustom = {
                 }
             });
             if (opts.stripDefaults) {
-                state = dcgSharedModule.Ac(dcg.Lh, i);
+                state = dcgSharedModule.Ac(dcg.Lh, state);
             }
             return state;
         }
