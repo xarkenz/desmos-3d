@@ -147,7 +147,8 @@ const DesmosCustom = {
             this.width = 0;
             this.height = 0;
             this.pixelRatio = 0;
-            this.lightDirection = [1, 5, 1];
+            this.lightDirection = [1, 1, 5];
+            this.ambientLight = 0.4;
         }
 
         template() {
@@ -218,6 +219,7 @@ const DesmosCustom = {
                     uniform mat4 uModelViewMatrix;
                     uniform mat4 uProjectionMatrix;
                     uniform vec3 uLightDirection;
+                    uniform float uAmbientLight;
 
                     in vec3 aPosition;
                     in vec3 aColor;
@@ -228,7 +230,7 @@ const DesmosCustom = {
                     void main() {
                         gl_Position = uProjectionMatrix * uModelViewMatrix * vec4(aPosition, 1.0);
 
-                        float lightingMultiplier = 0.7 * abs(dot(normalize(aNormal), normalize(uLightDirection))) + 0.3;
+                        float lightingMultiplier = uAmbientLight + (1.0 - uAmbientLight) * abs(dot(normalize(aNormal), normalize(uLightDirection)));
                         vColor = vec4(aColor * lightingMultiplier, 1.0);
                     }
                 `],
@@ -255,6 +257,7 @@ const DesmosCustom = {
                     modelViewMatrix: this.gl.getUniformLocation(shaderProgram, "uModelViewMatrix"),
                     projectionMatrix: this.gl.getUniformLocation(shaderProgram, "uProjectionMatrix"),
                     lightDirection: this.gl.getUniformLocation(shaderProgram, "uLightDirection"),
+                    ambientLight: this.gl.getUniformLocation(shaderProgram, "uAmbientLight"),
                 },
                 createBuffer: () => new DesmosCustom.GeometryBuffer(this.gl, [
                     { name: "position", id: this.program.triangles.attribute.position, channels: 3 },
@@ -532,7 +535,10 @@ const DesmosCustom = {
                 this.gl.uniformMatrix4fv(program.uniform.projectionMatrix, false, this.grapher.controls.orientation.getProjection());
             }
             if (program.uniform.lightDirection) {
-                this.gl.uniform3f(program.uniform.lightDirection, this.lightDirection[0], this.lightDirection[2], this.lightDirection[1]);
+                this.gl.uniform3f(program.uniform.lightDirection, ...this.lightDirection);
+            }
+            if (program.uniform.ambientLight) {
+                this.gl.uniform1f(program.uniform.ambientLight, this.ambientLight);
             }
             if (program.uniform.resolution) {
                 this.gl.uniform2f(program.uniform.resolution, this.width, this.height);
