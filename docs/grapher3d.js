@@ -202,7 +202,7 @@ const DesmosCustom = {
                 this.gl = this.canvasNode.getContext("webgl");
             }
             if (!this.gl) {
-                console.error("Unable to create a WebGL context. WebGL may not be supported by your browser.");
+                throw new Error("Unable to create a WebGL context. WebGL may not be supported by your browser.");
             }
 
             this.gl.enable(this.gl.BLEND);
@@ -696,13 +696,20 @@ const DesmosCustom = {
                 let color = layer.colorFromHex(branch.color);
                 switch (branch.graphMode) {
                     case dcg.GraphMode.CURVE_3D_PARAMETRIC:
-                    case dcg.GraphMode.CURVE_3D_XY_GRAPH:
+                    case dcg.GraphMode.CURVE_3D_PARAMETRIC_POLAR_CYLINDRICAL:
+                    case dcg.GraphMode.CURVE_3D_PARAMETRIC_POLAR_SPHERICAL:
+                    case dcg.GraphMode.CURVE_3D_PLANAR_GRAPH:
                         this.addCurve(layer, color, 1, branch.thickness, branch.points);
                         break;
                     case dcg.GraphMode.SURFACE_PARAMETRIC:
+                    case dcg.GraphMode.SURFACE_PARAMETRIC_POLAR_CYLINDRICAL:
+                    case dcg.GraphMode.SURFACE_PARAMETRIC_POLAR_SPHERICAL:
                     case dcg.GraphMode.SURFACE_Z_BASED:
                     case dcg.GraphMode.SURFACE_X_BASED:
                     case dcg.GraphMode.SURFACE_Y_BASED:
+                    case dcg.GraphMode.SURFACE_Z_BASED_POLAR:
+                    case dcg.GraphMode.SURFACE_POLAR_CYLINDRICAL:
+                    case dcg.GraphMode.SURFACE_POLAR_SPHERICAL:
                     case dcg.GraphMode.SURFACE_IMPLICIT:
                         this.addMesh(layer, color, branch.meshData);
                         break;
