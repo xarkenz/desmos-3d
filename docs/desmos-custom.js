@@ -724,7 +724,7 @@ const DesmosCustom = {
                 }
             },
         
-            Grapher3DGraphsLayer: class { // TODO: this is pretty nasty in terms of webgl
+            Grapher3DGraphsLayer: class {
                 constructor(controller, settings) {
                     this.controller = controller;
                     this.settings = settings;

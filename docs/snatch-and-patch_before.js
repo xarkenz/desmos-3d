@@ -1,6 +1,4 @@
 const dcg = {
-    MODULE_SOURCE_EXPECTED_HASH: -364671910,
-    MODULE_SOURCE_HASH: null,
     MODULE_SOURCE: null,
     MODULE: null,
 
@@ -227,61 +225,17 @@ dcg.setEnumerable = (obj, key, value) => {
     return value;
 };
 
-// Override window.eval to snatch the Desmos shared module when the Desmos script loads
+// Temporarily override window.eval in order to:
+// - snatch the Desmos shared module when the calculator_desktop script loads
+// - patch one of the shared module functions (equivalent to dcg.copyProperties)
+//   to convert a second argument of { product: "graphing" } to { product: "graphing-3d" }
+//   (this is a crucial step in enabling 3D mode... I couldn't find a better way to do it)
 window.__temp_eval = window.eval;
 window.eval = (source) => {
-    dcg.MODULE_SOURCE_HASH = DesmosCustom.stringHashCode(dcg.MODULE_SOURCE = source);
-
-    const rawModule = window.__temp_eval(dcg.MODULE_SOURCE);
+    const rawModule = window.__temp_eval(dcg.MODULE_SOURCE = source);
     dcg.MODULE = {};
     for (let [name, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(rawModule))) {
         let value = descriptor.get();
-        /*if (typeof value === "function" && value.length === 2 && value.toString().includes("exports")) {
-            Object.defineProperty(dcg.MODULE, name, { configurable: true, get: () => (arg1, arg2) => {
-                const getExports = value(arg1, arg2);
-                return () => {
-                    let exports = getExports();
-                    if ("mountToNode" in exports && !("__temp_mountToNode" in exports)) {
-                        exports.__temp_mountToNode = exports.mountToNode;
-                        exports.mountToNode = function(cls, elt, props) {
-                            if ("makeAPI" in props) {
-                                dcg.View = Desmos.Private.Fragile.DCGView;
-                                dcg.GraphingCalculator = Desmos.GraphingCalculator.prototype.constructor;
-                                dcg.AbstractGraphingCalculator = Object.getPrototypeOf(dcg.GraphingCalculator);
-                                DesmosCustom.init();
-                                props.makeAPI = function(arg) {
-                                    return new DesmosCustom.GraphingCalculator3D(arg, {
-                                        settingsMenu: false,
-                                        keypad: false,
-                                        zoomButtons: false,
-                                        branding: false,
-                                        border: false,
-                                        disableScrollFix: true,
-                                        expressions: false,
-                                        hideGeoUI: true,
-                                    });
-                                };
-                            }
-                            return this.__temp_mountToNode(cls, elt, props);
-                        };
-                    }
-                    return exports;
-                };
-            } });
-        } else if (typeof value === "function" && value.length === 3 && value.toString().includes("__esModule")) {
-            Object.defineProperty(dcg.MODULE, name, { configurable: true, get: () => {
-                if (Desmos && Desmos.GraphingCalculator) {
-                    dcg.View = Desmos.Private.Fragile.DCGView;
-                    dcg.GraphingCalculator = Desmos.GraphingCalculator.prototype.constructor;
-                    dcg.AbstractGraphingCalculator = Object.getPrototypeOf(dcg.GraphingCalculator);
-                    DesmosCustom.init();
-                    // TODO: fix in aftermath
-                    dcg.GraphingCalculator.prototype.constructor = DesmosCustom.GraphingCalculator3D.prototype.constructor;
-                    Object.defineProperty(dcg.MODULE, name, descriptor);
-                }
-                return descriptor.get();
-            } });
-        }*/
         if (typeof value === "function" && value.length === 2 && value.toString().length <= 20) {
             Object.defineProperty(dcg.MODULE, name, { configurable: true, get: () => (arg1, arg2) => {
                 if (arg2 && typeof arg2 === "object" && arg2.product === "graphing") {
@@ -298,19 +252,3 @@ window.eval = (source) => {
     delete window.__temp_eval;
     return dcg.MODULE;
 };
-
-/*Object.defineProperty(Object.prototype, "__temp_hasOwnProperty", { value: Object.prototype.hasOwnProperty });
-Object.prototype.hasOwnProperty = function(name) {
-    if ("GraphingCalculator" in this) {
-        dcg.View = this.Private.Fragile.DCGView;
-        dcg.GraphingCalculator = this.GraphingCalculator.prototype.constructor;
-        dcg.AbstractGraphingCalculator = Object.getPrototypeOf(dcg.GraphingCalculator);
-        DesmosCustom.init();
-        // TODO: fix in aftermath
-        dcg.GraphingCalculator.prototype.constructor = DesmosCustom.GraphingCalculator3D.prototype.constructor;
-        Object.prototype.hasOwnProperty = Object.prototype.__temp_hasOwnProperty;
-        delete Object.prototype.__temp_hasOwnProperty;
-        return this.hasOwnProperty(name);
-    }
-    return this.__temp_hasOwnProperty(name);
-};*/
