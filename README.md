@@ -48,8 +48,8 @@ You can now graph equations of *x*, *y*, **and** *z*. These can be simple relati
 implicit equations, such as `xyz = 1`. The surfaces are (mostly) limited to the 3D space spanned by the graph bounds,
 which can be changed in the settings menu in the top-right corner.
 
-*Note: Weirdly, equations between* x *and* y *render as a curve in the* xy*-plane instead of surfaces. Again,
-there are plans to change this in the future.*
+*Note: Weirdly, equations between* x *and* y *render as a curve in the* xy-*plane instead of surfaces. Again,*
+*there are plans to change this in the future.*
 
 It is also possible to graph polar equations in 3D. There are three types of polar equations that work:
 
