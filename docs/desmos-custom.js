@@ -765,7 +765,7 @@ const DesmosCustom = {
                         return;
                     }
                     sketch.branches.forEach((branch) => {
-                        let color = layer.colorFromHex(branch.color);
+                        let color = layer.hexColorToRGB(branch.color);
                         switch (branch.graphMode) {
                             case dcg.GraphMode.CURVE_3D_PARAMETRIC:
                             case dcg.GraphMode.CURVE_3D_PARAMETRIC_POLAR_CYLINDRICAL:
