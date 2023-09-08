@@ -1,4 +1,6 @@
 const DesmosCustom = {
+    isPowerOf2: (value) => (value & (value - 1)) === 0,
+
     stringHashCode: (string) => [...string].reduce(
         (hash, char) => (Math.imul(31, hash) + char.charCodeAt(0)) | 0,
         0,
@@ -399,6 +401,52 @@ const DesmosCustom = {
                             return { position, color, normal, indices };
                         },
                     };
+
+                    shaderProgram = this.createShaderProgram([
+                        [this.gl.VERTEX_SHADER, `
+                            uniform mat4 uModelViewMatrix;
+                            uniform mat4 uProjectionMatrix;
+
+                            in vec3 aPosition;
+                            in vec2 aTexCoord;
+
+                            out highp vec2 vTexCoord;
+                    
+                            void main() {
+                                gl_Position = uProjectionMatrix * uModelViewMatrix * vec4(aPosition, 1.0);
+                                vTexCoord = aTexCoord;
+                            }
+                        `],
+                        [this.gl.FRAGMENT_SHADER, `
+                            uniform sampler2D uTexture;
+
+                            in highp vec2 vTexCoord;
+        
+                            void main() {
+                                color = texture(uTexture, vTexCoord);
+                            }
+                        `],
+                    ]);
+                    this.gl.useProgram(shaderProgram);
+                    this.program.textured = {
+                        id: shaderProgram,
+                        attribute: {
+                            // guarantee that there is an attribute bound at location 0 so the browser doesn't have to do expensive emulation; see
+                            // https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/WebGL_best_practices#always_enable_vertex_attrib_0_as_an_array
+                            // (i don't know whether this is necessary to do here...)
+                            position: (this.gl.bindAttribLocation(shaderProgram, 0, "aPosition"), 0),
+                            texCoord: this.gl.getAttribLocation(shaderProgram, "aTexCoord"),
+                        },
+                        uniform: {
+                            modelViewMatrix: this.gl.getUniformLocation(shaderProgram, "uModelViewMatrix"),
+                            projectionMatrix: this.gl.getUniformLocation(shaderProgram, "uProjectionMatrix"),
+                            texture: this.gl.getUniformLocation(shaderProgram, "uTexture"),
+                        },
+                        createBuffer: () => new DesmosCustom.GeometryBuffer(this.gl, [
+                            { name: "position", id: this.program.textured.attribute.position, channels: 3 },
+                            { name: "texCoord", id: this.program.textured.attribute.texCoord, channels: 2 },
+                        ]),
+                    };
         
                     shaderProgram = this.createShaderProgram([
                         [this.gl.VERTEX_SHADER, `
@@ -605,7 +653,7 @@ const DesmosCustom = {
                     this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
                 }
         
-                setProgram(program) {
+                setProgram(program, texture = null) {
                     this.gl.useProgram(program.id);
         
                     if (program.uniform.modelViewMatrix) {
@@ -623,6 +671,11 @@ const DesmosCustom = {
                     if (program.uniform.resolution) {
                         this.gl.uniform2f(program.uniform.resolution, this.width, this.height);
                     }
+                    if (program.uniform.texture && texture != null) {
+                        this.gl.activeTexture(this.gl.TEXTURE0);
+                        this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
+                        this.gl.uniform1i(program.uniform.texture, 0);
+                    }
                 }
         
                 setBackgroundColor(color = "#ffffff") {
@@ -639,7 +692,7 @@ const DesmosCustom = {
         
                 showBox(show) {
                     this.__showBox = show;
-                    this.grapher.controller.requestRedrawGraph();
+                    //this.grapher.controller.requestRedrawGraph();
                 }
 
                 isShowAxes() {
@@ -648,7 +701,7 @@ const DesmosCustom = {
         
                 showAxes(show) {
                     this.__showAxes = show;
-                    this.grapher.controller.requestRedrawGraph();
+                    //this.grapher.controller.requestRedrawGraph();
                 }
 
                 isShowPlane() {
@@ -657,20 +710,24 @@ const DesmosCustom = {
         
                 showPlane(show) {
                     this.__showPlane = show;
-                    this.grapher.controller.requestRedrawGraph();
+                    //this.grapher.controller.requestRedrawGraph();
                 }
         
                 updateAxes() {
                 }
         
                 updatePlaneMap() {
+                    let { canvasNode, ctx } = this.grapher.planeGrapher.canvasLayer;
+                    this.grapher.gridLayer.updatePlaneMap(this, ctx.getImageData(0, 0, canvasNode.width, canvasNode.height));
                 }
             },
         
             Grapher3DGridLayer: class {
                 constructor(grapher) {
                     this.grapher = grapher;
-                    this.buffer = null;
+                    this.lineBuffer = null;
+                    this.planeBuffer = null;
+                    this.planeTexture = null;
                     this.__cachedState = null;
                 }
         
@@ -683,13 +740,13 @@ const DesmosCustom = {
                         showAxes: this.grapher.webglLayer.isShowAxes(),
                         showPlane: this.grapher.webglLayer.isShowPlane(),
                     });
-                    if (!dcg.isEqual(state, this.__cachedState)) {
+                    if (!this.lineBuffer || !dcg.isEqual(state, this.__cachedState)) {
                         this.__cachedState = state;
         
-                        if (!this.buffer) {
-                            this.buffer = layer.program.lines.createBuffer();
+                        if (!this.lineBuffer) {
+                            this.lineBuffer = layer.program.lines.createBuffer();
                         } else {
-                            this.buffer.clear();
+                            this.lineBuffer.clear();
                         }
         
                         // TODO: more grid settings (needs desmos patch)
@@ -728,12 +785,49 @@ const DesmosCustom = {
                             );
                         }
         
-                        this.buffer.addGeometry(layer.program.lines.generateLineGeometry(position, color, width, indices));
-                        this.buffer.upload(layer.gl);
+                        this.lineBuffer.addGeometry(layer.program.lines.generateLineGeometry(position, color, width, indices));
+                        this.lineBuffer.upload(layer.gl);
                     }
         
                     layer.setProgram(layer.program.lines);
-                    this.buffer.draw(layer.gl);
+                    this.lineBuffer.draw(layer.gl);
+
+                    if (this.planeTexture && this.planeBuffer) {
+                        layer.setProgram(layer.program.textured, this.planeTexture);
+                        this.planeBuffer.draw(layer.gl);
+                    }
+                }
+
+                updatePlaneMap(layer, imageData) {
+                    if (!this.planeTexture) {
+                        this.planeTexture = layer.gl.createTexture();
+                    }
+                    layer.gl.bindTexture(layer.gl.TEXTURE_2D, this.planeTexture);
+                    layer.gl.texImage2D(layer.gl.TEXTURE_2D, 0, layer.gl.RGBA, layer.gl.RGBA, layer.gl.UNSIGNED_BYTE, imageData);
+
+                    // WebGL1 doesn't support mipmaps for non-power-of-two (NPOT) image sizes
+                    if (!layer.legacyMode || (DesmosCustom.isPowerOf2(imageData.width) && DesmosCustom.isPowerOf2(imageData.height))) {
+                        layer.gl.generateMipmap(layer.gl.TEXTURE_2D);
+                    } else {
+                        layer.gl.texParameteri(layer.gl.TEXTURE_2D, layer.gl.TEXTURE_WRAP_S, layer.gl.CLAMP_TO_EDGE);
+                        layer.gl.texParameteri(layer.gl.TEXTURE_2D, layer.gl.TEXTURE_WRAP_T, layer.gl.CLAMP_TO_EDGE);
+                    }
+                    layer.gl.texParameteri(layer.gl.TEXTURE_2D, layer.gl.TEXTURE_MIN_FILTER, layer.gl.LINEAR);
+                    layer.gl.texParameteri(layer.gl.TEXTURE_2D, layer.gl.TEXTURE_MAG_FILTER, layer.gl.LINEAR);
+
+                    if (!this.planeBuffer) {
+                        this.planeBuffer = layer.program.textured.createBuffer();
+                    } else {
+                        this.planeBuffer.clear();
+                    }
+
+                    let { xmin, xmax, ymin, ymax } = this.grapher.getProjection().viewport;
+                    this.planeBuffer.addGeometry({
+                        position: [xmin,ymin,0, xmax,ymin,0, xmax,ymax,0, xmin,ymax,0],
+                        texCoord: [0,1, 1,1, 1,0, 0,0],
+                        indices: [0,1,2, 2,3,0],
+                    });
+                    this.planeBuffer.upload(layer.gl);
                 }
             },
         
@@ -894,7 +988,7 @@ const DesmosCustom = {
                     this.lastScrollZoom = Date.now();
                     this.preventScrollZoom = false;
         
-                    this.orientation = new DesmosCustom.Orientation3D(40.0, 0.1 * Math.PI, 0.3 * Math.PI);
+                    this.orientation = new DesmosCustom.Orientation3D(40.0, 0.1 * Math.PI, 1.9 * Math.PI);
         
                     this.addMouseWheelEventHandler();
                     this.addTouchEventHandler();

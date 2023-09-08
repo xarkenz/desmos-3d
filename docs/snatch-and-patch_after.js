@@ -58,12 +58,15 @@ dcg.defaultState = dcg.assignEnumerable(
     ),
 );
 
-// Override window.fetch in order to force requests to be sent to the Desmos domain
-/*window.__temp_fetch = window.fetch;
+// Override window.fetch in order to prevent any network requests with absolute path
+// (these would fail due to CORS anyway)
+window.__temp_fetch = window.fetch;
 window.fetch = (...args) => {
     if (typeof args[0] === "string" && args[0].startsWith("/")) {
-        args[0] = "https://www.desmos.com" + args[0];
+        let message = `Blocked attempt to access absolute path '${args[0]}'`;
+        console.warn(message);
+        return Promise.reject(new Error(message));
     }
 
     return window.__temp_fetch(...args);
-};*/
+};
