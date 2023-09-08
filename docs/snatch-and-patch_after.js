@@ -54,6 +54,16 @@ dcg.defaultState = dcg.assignEnumerable(
             ),
             { squareAxes: true },
         ),
-        { product:"graphing" },
+        { product: "graphing" },
     ),
 );
+
+// Override window.fetch in order to force requests to be sent to the Desmos domain
+/*window.__temp_fetch = window.fetch;
+window.fetch = (...args) => {
+    if (typeof args[0] === "string" && args[0].startsWith("/")) {
+        args[0] = "https://www.desmos.com" + args[0];
+    }
+
+    return window.__temp_fetch(...args);
+};*/

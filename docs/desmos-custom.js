@@ -210,6 +210,9 @@ const DesmosCustom = {
                     this.pixelRatio = 0;
                     this.lightDirection = [1, 1, 5];
                     this.ambientLight = 0.4;
+                    this.__showBox = !!this.grapher.settings.showBox3D;
+                    this.__showAxes = !!this.grapher.settings.showAxis3D;
+                    this.__showPlane = !!this.grapher.settings.showPlane3D && this.__showAxes;
                     this.__cachedBackgroundColor = null;
                 }
         
@@ -252,7 +255,8 @@ const DesmosCustom = {
                                 parseInt(match[2], 16) / 255,
                                 parseInt(match[3], 16) / 255,
                             ];
-                        } else if (match = hexColor.match(/^#([0-9A-Fa-f]{1})([0-9A-Fa-f]{1})([0-9A-Fa-f]{1})$/)) {
+                        }
+                        else if (match = hexColor.match(/^#([0-9A-Fa-f]{1})([0-9A-Fa-f]{1})([0-9A-Fa-f]{1})$/)) {
                             return [
                                 parseInt(match[1] + match[1], 16) / 255,
                                 parseInt(match[2] + match[2], 16) / 255,
@@ -264,11 +268,18 @@ const DesmosCustom = {
                 }
         
                 _loadContext() {
+                    const WEBGL_CONTEXT_OPTIONS = {
+                        alpha: false,
+                        depth: true,
+                        desynchronized: true,
+                        antialias: true,
+                    };
+
                     this.legacyMode = false;
-                    this.gl = this.canvasNode.getContext("webgl2");
+                    this.gl = this.canvasNode.getContext("webgl2", WEBGL_CONTEXT_OPTIONS);
                     if (!this.gl) {
                         this.legacyMode = true;
-                        this.gl = this.canvasNode.getContext("webgl");
+                        this.gl = this.canvasNode.getContext("webgl", WEBGL_CONTEXT_OPTIONS);
                     }
                     if (!this.gl) {
                         throw new Error("Unable to create a WebGL context. WebGL may not be supported by your browser.");
@@ -621,14 +632,32 @@ const DesmosCustom = {
                         this.grapher.controller.requestRedrawGraph();
                     }
                 }
+
+                isShowBox() {
+                    return this.__showBox;
+                }
         
                 showBox(show) {
+                    this.__showBox = show;
+                    this.grapher.controller.requestRedrawGraph();
+                }
+
+                isShowAxes() {
+                    return this.__showAxes;
                 }
         
                 showAxes(show) {
+                    this.__showAxes = show;
+                    this.grapher.controller.requestRedrawGraph();
+                }
+
+                isShowPlane() {
+                    return this.__showPlane;
                 }
         
                 showPlane(show) {
+                    this.__showPlane = show;
+                    this.grapher.controller.requestRedrawGraph();
                 }
         
                 updateAxes() {
@@ -650,6 +679,9 @@ const DesmosCustom = {
                         axisOpacity: this.grapher.settings.axisOpacity,
                         majorOpacity: this.grapher.settings.majorAxisOpacity,
                         minorOpacity: this.grapher.settings.minorAxisOpacity,
+                        showBox: this.grapher.webglLayer.isShowBox(),
+                        showAxes: this.grapher.webglLayer.isShowAxes(),
+                        showPlane: this.grapher.webglLayer.isShowPlane(),
                     });
                     if (!dcg.isEqual(state, this.__cachedState)) {
                         this.__cachedState = state;
@@ -664,30 +696,37 @@ const DesmosCustom = {
                         const MAJOR_STEP = 1;
                         const MINOR_SUBDIV_COUNT = 2;
         
-                        let position = [
-                            // axis lines
-                            state.xmin,0,0, state.xmax,0,0, 0,state.ymin,0, 0,state.ymax,0, 0,0,state.zmin, 0,0,state.zmax,
-                            // axis arrow tips
-                            state.xmax,0,0, state.xmax+0.25,0,0, 0,state.ymax,0, 0,state.ymax+0.25,0, 0,0,state.zmax, 0,0,state.zmax+0.25,
-                        ];
-                        let color = [
-                            // axis lines
-                            0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity,
-                            // axis arrow tips
-                            0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity,
-                        ];
-                        let width = [
-                            // axis lines
-                            2, 2, 2, 2, 2, 2,
-                            // axis arrow tips (this is where the magic happens)
-                            20, 0, 20, 0, 20, 0,
-                        ];
-                        let indices = [
-                            // axis lines
-                            0,1, 2,3, 4,5,
-                            // axis arrow tips
-                            6,7, 8,9, 10,11,
-                        ];
+                        let position = [];
+                        let color = [];
+                        let width = [];
+                        let indices = [];
+
+                        if (state.showAxes) {
+                            position.push(
+                                // axis lines
+                                state.xmin,0,0, state.xmax,0,0, 0,state.ymin,0, 0,state.ymax,0, 0,0,state.zmin, 0,0,state.zmax,
+                                // axis arrow tips
+                                state.xmax,0,0, state.xmax+0.25,0,0, 0,state.ymax,0, 0,state.ymax+0.25,0, 0,0,state.zmax, 0,0,state.zmax+0.25,
+                            );
+                            color.push(
+                                // axis lines
+                                0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity,
+                                // axis arrow tips
+                                0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity, 0,0,0,state.axisOpacity,
+                            );
+                            width.push(
+                                // axis lines
+                                2, 2, 2, 2, 2, 2,
+                                // axis arrow tips (this is where the magic happens)
+                                20, 0, 20, 0, 20, 0,
+                            );
+                            indices.push(
+                                // axis lines
+                                0,1, 2,3, 4,5,
+                                // axis arrow tips
+                                6,7, 8,9, 10,11,
+                            );
+                        }
         
                         this.buffer.addGeometry(layer.program.lines.generateLineGeometry(position, color, width, indices));
                         this.buffer.upload(layer.gl);
@@ -862,7 +901,7 @@ const DesmosCustom = {
                 }
 
                 static _getNextID() {
-                    if (typeof DesmosCustom.Grapher3DControls.__nextID != "number") {
+                    if (typeof DesmosCustom.Grapher3DControls.__nextID !== "number") {
                         DesmosCustom.Grapher3DControls.__nextID = 0;
                     }
                     return DesmosCustom.Grapher3DControls.__nextID++;
@@ -902,22 +941,22 @@ const DesmosCustom = {
                 }
         
                 addMouseWheelEventHandler() {
-                    let e = false;
+                    const SCROLL_ZOOM_COOLDOWN_MS = 50;
+                    let isScrolling = false;
                     let lastWheelX, lastWheelY;
-                    let n = 0;
                     dcg.$(window).on("scroll" + this.name, (event) => {
-                        e = true;
+                        isScrolling = true;
                     });
                     dcg.$(window).on("wheel" + this.name, (event) => {
                         lastWheelX = event.clientX;
                         lastWheelY = event.clientY;
                     });
                     dcg.$(window).on("mousemove" + this.name, (event) => {
-                        if (e) {
+                        if (isScrolling) {
                             let dx = event.clientX - lastWheelX;
                             let dy = event.clientY - lastWheelY;
-                            if (dx*dx + dy*dy >= 100) {
-                                e = false;
+                            if (dx * dx + dy * dy >= 100) {
+                                isScrolling = false;
                             }
                         }
                     });
@@ -927,7 +966,7 @@ const DesmosCustom = {
                             return;
                         }
                         let now = Date.now();
-                        if (this.preventScrollZoom && now - this.lastScrollZoom > 50) {
+                        if (this.preventScrollZoom && now - this.lastScrollZoom > SCROLL_ZOOM_COOLDOWN_MS) {
                             this.preventScrollZoom = false;
                         }
                         this.lastScrollZoom = now;
@@ -1326,14 +1365,18 @@ const DesmosCustom = {
             },
         
             init3DGrapher: () => {
+                window.headerController.product = "graphing-3d";
+                window.headerController.graphsController.product = "graphing-3d";
+
                 Calc._calc.initializeGrapher3d(DesmosCustom.Grapher3D);
+
+                document.title = Calc.controller.s("account-shell-heading-3dcalc-page-title");
 
                 Object.assign(Calc.controller.getBlankState().graph.viewport, {
                     xmin: -10, xmax: 10,
                     ymin: -10, ymax: 10,
                     zmin: -10, zmax: 10,
                 });
-
                 Calc.setBlank();
             },
         });
