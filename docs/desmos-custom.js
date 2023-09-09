@@ -792,7 +792,7 @@ const DesmosCustom = {
                     layer.setProgram(layer.program.lines);
                     this.lineBuffer.draw(layer.gl);
 
-                    if (this.planeTexture && this.planeBuffer) {
+                    if (this.grapher.planeGrapher.isDrawingPlaneFor3dMode() && this.planeTexture && this.planeBuffer) {
                         layer.setProgram(layer.program.textured, this.planeTexture);
                         this.planeBuffer.draw(layer.gl);
                     }
@@ -1200,7 +1200,7 @@ const DesmosCustom = {
                 }
         
                 static copyGraphProperties(target, source) {
-                    target = dcg.assigned(dcg.defaultState, target);
+                    target = dcg.assigned(dcg.defaultState3D, target);
                     let state = dcg.assignEnumerable({}, target);
                     delete state.viewport;
                     let validated = source.validateSettings(state);
@@ -1372,7 +1372,7 @@ const DesmosCustom = {
                         }
                     });
                     if (opts.stripDefaults) {
-                        state = dcg.stripDefaults(dcg.defaultState, state);
+                        state = dcg.stripDefaults(dcg.defaultState3D, state);
                     }
                     return state;
                 }
@@ -1471,6 +1471,7 @@ const DesmosCustom = {
                     ymin: -10, ymax: 10,
                     zmin: -10, zmax: 10,
                 });
+
                 Calc.setBlank();
             },
         });

@@ -225,6 +225,57 @@ dcg.setEnumerable = (obj, key, value) => {
     return value;
 };
 
+dcg.defaultState3D = dcg.assignEnumerable(
+    dcg.assignEnumerable(
+        {},
+        {
+            showGrid: true,
+            showXAxis: true,
+            showYAxis: true,
+            xAxisStep: 0,
+            yAxisStep: 0,
+            xAxisScale: "linear",
+            yAxisScale: "linear",
+            xAxisMinorSubdivisions: 0,
+            yAxisMinorSubdivisions: 0,
+            xAxisArrowMode: "NONE",
+            yAxisArrowMode: "NONE",
+            xAxisLabel: "",
+            yAxisLabel: "",
+            xAxisNumbers: true,
+            yAxisNumbers: true,
+            polarMode: false,
+            polarNumbers: true,
+            degreeMode: false,
+            randomSeed: "",
+            restrictGridToFirstQuadrant: false,
+            userLockedViewport: false,
+        },
+    ),
+    dcg.copyProperties(
+        dcg.assignEnumerable(
+            dcg.assignEnumerable(
+                {},
+                {
+                    threeDMode: true,
+                    worldRotation3D: [],
+                    axis3D: [0, 0, 1],
+                    speed3D: 0,
+                    showPlane3D: true,
+                    plane3dOpacity: "",
+                    backgroundColor3d: "#ffffff",
+                    showAxis3D: true,
+                    showAxisLabels3D: true,
+                    showNumbers3D: true,
+                    showBox3D: true,
+                },
+            ),
+            { squareAxes: true },
+        ),
+        { product: "graphing-3d" },
+    ),
+);
+
 // Temporarily override window.eval in order to:
 // - snatch the Desmos shared module when the calculator_desktop script loads
 // - patch one of the shared module functions (equivalent to dcg.copyProperties)
